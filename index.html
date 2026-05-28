@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulateur PEA – Planification patrimoniale</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="badge">Plan d'Épargne en Actions</div>
+    <h1>Simulateur PEA<br>Planification patrimoniale</h1>
+    <p id="header-sub">Projection sur 20 ans avec intérêts composés mensuels</p>
+  </header>
+
+  <!-- Presets + Scénarios -->
+  <div class="presets-strip">
+    <span class="presets-lbl">Profils :</span>
+    <button class="preset-btn" data-preset="conservateur">Conservateur — 100 €/mois · 4 %</button>
+    <button class="preset-btn" data-preset="equilibre">Équilibré — 200 €/mois · 7 %</button>
+    <button class="preset-btn" data-preset="ambitieux">Ambitieux — 500 €/mois · 8 %</button>
+    <span class="presets-sep"></span>
+    <div class="scenario-wrap" id="scenario-wrap">
+      <button class="scenario-btn" id="btn-scenario">Scénarios ▾</button>
+      <div class="scenario-menu" id="scenario-menu">
+        <div class="scenario-item" data-key="crash2008">
+          <div class="scenario-title">📉 Krach boursier</div>
+          <div class="scenario-desc">Crise −40 % une année, rebond +25 % l'année suivante</div>
+        </div>
+        <div class="scenario-item" data-key="decennie">
+          <div class="scenario-title">😴 Décennie perdue</div>
+          <div class="scenario-desc">10 ans à ~1 %/an, puis reprise à la normale</div>
+        </div>
+        <div class="scenario-item" data-key="inflation">
+          <div class="scenario-title">🔥 Crise inflationniste</div>
+          <div class="scenario-desc">3 ans de marchés sous pression (~2 %/an)</div>
+        </div>
+        <div class="scenario-item" data-key="carriere">
+          <div class="scenario-title">👶 Carrière en U</div>
+          <div class="scenario-desc">Versements hauts, baisse milieu (enfants), remontée</div>
+        </div>
+        <div class="scenario-item" data-key="bull">
+          <div class="scenario-title">🚀 Bull market exceptionnel</div>
+          <div class="scenario-desc">5 ans euphoriques (12 %/an), puis normalisation</div>
+        </div>
+        <div class="scenario-divider"></div>
+        <button class="scenario-reset" id="btn-scenario-reset">Réinitialiser les phases</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls – bloc 1 : 4 paramètres principaux -->
+  <div class="controls-section">
+    <div class="controls-grid">
+
+      <div class="ctrl-card">
+        <span class="ctrl-label">
+          Versement mensuel
+          <span class="tt-anchor">
+            <button class="tt-btn" type="button" aria-label="Aide">?</button>
+            <div class="tt-box">Le montant que vous versez chaque mois sur votre PEA.</div>
+          </span>
+        </span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value blue" id="cv-mensuel">200 €</span>
+          <input class="ctrl-num" type="number" id="n-mensuel" min="50" max="2000" step="10" value="200">
+        </div>
+        <input type="range" id="s-mensuel" min="50" max="2000" step="10" value="200">
+        <div class="ctrl-minmax"><span>50 €</span><span>2 000 €</span></div>
+      </div>
+
+      <div class="ctrl-card">
+        <span class="ctrl-label">
+          Rendement annuel brut
+          <span class="tt-anchor">
+            <button class="tt-btn" type="button" aria-label="Aide">?</button>
+            <div class="tt-box">Performance annuelle attendue de l'ETF. Le MSCI World a rapporté ~7 % / an sur 30 ans.</div>
+          </span>
+        </span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value gold" id="cv-taux">7 %</span>
+          <input class="ctrl-num" type="number" id="n-taux" min="0" max="15" step="0.1" value="7">
+        </div>
+        <input type="range" id="s-taux" min="0" max="15" step="0.1" value="7">
+        <div class="ctrl-minmax"><span>0 %</span><span>15 %</span></div>
+      </div>
+
+      <div class="ctrl-card">
+        <span class="ctrl-label">
+          Durée
+          <span class="tt-anchor">
+            <button class="tt-btn" type="button" aria-label="Aide">?</button>
+            <div class="tt-box">Durée totale du placement. Les intérêts composés décuplent l'effet sur le long terme.</div>
+          </span>
+        </span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value green" id="cv-duree">20 ans</span>
+          <input class="ctrl-num" type="number" id="n-duree" min="1" max="40" step="1" value="20">
+        </div>
+        <input type="range" id="s-duree" min="1" max="40" step="1" value="20">
+        <div class="ctrl-minmax"><span>1 an</span><span>40 ans</span></div>
+      </div>
+
+      <div class="ctrl-card">
+        <span class="ctrl-label">
+          Apport initial
+          <span class="tt-anchor">
+            <button class="tt-btn" type="button" aria-label="Aide">?</button>
+            <div class="tt-box">Capital investi dès l'ouverture du PEA. Profite immédiatement des intérêts composés.</div>
+          </span>
+        </span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value purple" id="cv-apport">0 €</span>
+          <input class="ctrl-num" type="number" id="n-apport" min="0" max="50000" step="100" value="0">
+        </div>
+        <input type="range" id="s-apport" min="0" max="50000" step="100" value="0">
+        <div class="ctrl-minmax"><span>0 €</span><span>50 000 €</span></div>
+      </div>
+
+    </div>
+
+    <div class="controls-sep"></div>
+
+    <!-- Controls – bloc 2 : paramètres avancés -->
+    <div class="controls-grid">
+
+      <div class="ctrl-card">
+        <span class="ctrl-label">
+          Inflation annuelle
+          <span class="tt-anchor">
+            <button class="tt-btn" type="button" aria-label="Aide">?</button>
+            <div class="tt-box">L'inflation réduit le pouvoir d'achat. La BCE vise 2 % / an. Utilisée pour la valeur réelle.</div>
+          </span>
+        </span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value teal" id="cv-inflation">2 %</span>
+          <input class="ctrl-num" type="number" id="n-inflation" min="0" max="5" step="0.1" value="2">
+        </div>
+        <input type="range" id="s-inflation" min="0" max="5" step="0.1" value="2">
+        <div class="ctrl-minmax"><span>0 %</span><span>5 %</span></div>
+      </div>
+
+      <div class="ctrl-card">
+        <span class="ctrl-label">
+          Frais annuels ETF (TER)
+          <span class="tt-anchor">
+            <button class="tt-btn" type="button" aria-label="Aide">?</button>
+            <div class="tt-box">TER du fonds (Total Expense Ratio). Le WPEA (Amundi) affiche 0.25 %. Déduits chaque année sur le capital.</div>
+          </span>
+        </span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value red" id="cv-frais">0.25 %</span>
+          <input class="ctrl-num" type="number" id="n-frais" min="0" max="1" step="0.05" value="0.25">
+        </div>
+        <input type="range" id="s-frais" min="0" max="1" step="0.05" value="0.25">
+        <div class="ctrl-minmax"><span>0 %</span><span>1 %</span></div>
+      </div>
+
+      <div class="ctrl-card">
+        <span class="ctrl-label">
+          Hausse versements / an
+          <span class="tt-anchor">
+            <button class="tt-btn" type="button" aria-label="Aide">?</button>
+            <div class="tt-box">Modélise une progression de carrière. Vos versements mensuels augmentent chaque année de ce pourcentage.</div>
+          </span>
+        </span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value gold" id="cv-aug">0 %</span>
+          <input class="ctrl-num" type="number" id="n-aug" min="0" max="10" step="0.5" value="0">
+        </div>
+        <input type="range" id="s-aug" min="0" max="10" step="0.5" value="0">
+        <div class="ctrl-minmax"><span>0 %</span><span>10 %</span></div>
+      </div>
+
+    </div>
+
+    <div class="controls-footer">
+      <button class="btn-reset" id="btn-reset">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+          <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+        </svg>
+        Réinitialiser
+      </button>
+    </div>
+  </div>
+
+  <!-- Versements ponctuels (dépliable) -->
+  <div class="coll-card" id="coll-vp">
+    <button class="coll-trigger" onclick="toggleColl('coll-vp')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+      </svg>
+      Versements ponctuels
+      <span class="coll-badge" id="vp-count"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+      <div id="vp-list"></div>
+      <button class="btn-vp-add" id="btn-vp-add">+ Ajouter un versement (prime, bonus, héritage…)</button>
+    </div>
+  </div>
+
+  <!-- Fiscalité (dépliable) -->
+  <div class="coll-card" id="coll-fisc">
+    <button class="coll-trigger" onclick="toggleColl('coll-fisc')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M1 4.5A1.5 1.5 0 0 1 2.5 3h11A1.5 1.5 0 0 1 15 4.5v.793l-6.674 3.222a2.25 2.25 0 0 1-1.652 0L1 5.293V4.5zm0 2.3v4.7A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5V6.8l-6.022 2.908a3.25 3.25 0 0 1-2.956 0L1 6.8z"/>
+      </svg>
+      Fiscalité
+      <span class="coll-badge" id="fisc-badge" style="background:rgba(163,113,247,.14);color:var(--purple)"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+      <div class="fisc-cb-row">
+        <input class="cb-custom" type="checkbox" id="cb-fisc">
+        <label for="cb-fisc">Appliquer la fiscalité PEA — sortie après 5 ans · prélèvements sociaux 17.2 % sur la plus-value uniquement</label>
+      </div>
+      <div id="fisc-details"></div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  PLAFOND PEA — widget toujours visible                 -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="plafond-widget" id="plafond-widget">
+    <div class="plafond-header">
+      <div class="plafond-header-left">
+        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+          <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
+        </svg>
+        <span class="plafond-title-text">Plafond PEA</span>
+        <span class="plafond-status-badge" id="plafond-badge"></span>
+      </div>
+      <label class="plafond-couple-lbl">
+        <input class="cb-custom" type="checkbox" id="cb-couple">
+        En couple — 2 PEA · plafond 300 000 €
+      </label>
+    </div>
+    <div class="plafond-track">
+      <div class="plafond-fill" id="plafond-fill"></div>
+    </div>
+    <div class="plafond-meta">
+      <span id="plafond-verse-lbl">0 €</span>
+      <span id="plafond-pct-lbl">0 %</span>
+      <span id="plafond-max-lbl">150 000 €</span>
+    </div>
+    <div class="plafond-info" id="plafond-info"></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  AU-DELÀ DU PLAFOND (dépliable)                       -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="coll-card" id="coll-aude">
+    <button class="coll-trigger" onclick="toggleColl('coll-aude')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5zm14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5z"/>
+      </svg>
+      Au-delà du plafond
+      <span class="coll-badge" id="aude-badge" style="background:rgba(210,153,34,.14);color:var(--gold)"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+      <div class="fisc-cb-row">
+        <input class="cb-custom" type="checkbox" id="cb-aude">
+        <label for="cb-aude">Continuer à épargner au-delà du plafond PEA dans une enveloppe complémentaire</label>
+      </div>
+      <div id="aude-params" class="aude-params-hidden">
+        <div class="aude-grid">
+          <div class="aude-field aude-field-wide">
+            <label class="aude-lbl">Enveloppe complémentaire</label>
+            <select class="aude-select" id="aude-enveloppe">
+              <option value="cto">CTO — Compte-Titres Ordinaire (flat tax 30 %)</option>
+              <option value="av">Assurance-vie &gt;8 ans (abattement 4 600 € + taux 24.7 %)</option>
+              <option value="peapme">PEA-PME — jusqu'à 225 000 € cumulés (PS 17.2 %)</option>
+            </select>
+          </div>
+          <div class="aude-field">
+            <label class="aude-lbl">Rendement attendu (%)</label>
+            <input class="vp-input" type="number" id="n-taux-aude" min="0" max="15" step="0.5" value="7">
+          </div>
+          <div class="aude-field">
+            <label class="aude-lbl">Frais annuels (%)</label>
+            <input class="vp-input" type="number" id="n-frais-aude" min="0" max="2" step="0.05" value="0.25">
+          </div>
+        </div>
+        <div id="aude-fiscal"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  PHASES DE VIE (dépliable)                            -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="coll-card" id="coll-phases">
+    <button class="coll-trigger" onclick="toggleColl('coll-phases')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
+      </svg>
+      Personnalisation avancée — Phases de vie
+      <span class="coll-badge" id="phases-badge"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+
+      <!-- Explication scénario appliqué -->
+      <div id="scenario-explain" class="scenario-explain" style="display:none"></div>
+
+      <!-- Liste des cartes de phases -->
+      <div id="phases-list"></div>
+
+      <!-- Validation (chevauchements, avertissements) -->
+      <div id="phases-validation"></div>
+
+      <!-- Bouton ajouter phase -->
+      <button class="btn-vp-add" id="btn-phase-add">+ Ajouter une phase de vie</button>
+
+      <!-- Bascule vue tableau année par année -->
+      <button class="btn-year-view" id="btn-year-view">Vue tableau — paramètres par année</button>
+      <div id="phases-year-table" style="display:none"></div>
+
+    </div>
+  </div>
+
+  <!-- KPI grid : 7 existantes + 4 plafond -->
+  <div class="kpi-grid">
+    <div class="kpi green">
+      <span class="kpi-delta" id="delta-final"></span>
+      <div class="kpi-label">Capital final PEA</div>
+      <div class="kpi-value" id="kpi-final">—</div>
+      <div class="kpi-sub" id="kpi-final-sub">valeur nominale</div>
+    </div>
+    <div class="kpi teal">
+      <span class="kpi-delta" id="delta-reel"></span>
+      <div class="kpi-label">Valeur réelle</div>
+      <div class="kpi-value" id="kpi-reel">—</div>
+      <div class="kpi-sub" id="kpi-reel-sub">pouvoir d'achat actuel</div>
+    </div>
+    <div class="kpi blue">
+      <span class="kpi-delta" id="delta-verse"></span>
+      <div class="kpi-label">Total versé (PEA)</div>
+      <div class="kpi-value" id="kpi-verse">—</div>
+      <div class="kpi-sub" id="kpi-verse-sub">—</div>
+    </div>
+    <div class="kpi gold">
+      <span class="kpi-delta" id="delta-brut"></span>
+      <div class="kpi-label">Plus-value brute</div>
+      <div class="kpi-value" id="kpi-brut">—</div>
+      <div class="kpi-sub" id="kpi-brut-sub">—</div>
+    </div>
+    <div class="kpi purple">
+      <span class="kpi-delta" id="delta-net"></span>
+      <div class="kpi-label">Plus-value nette</div>
+      <div class="kpi-value" id="kpi-net">—</div>
+      <div class="kpi-sub" id="kpi-net-sub">—</div>
+    </div>
+    <div class="kpi red">
+      <span class="kpi-delta" id="delta-frais"></span>
+      <div class="kpi-label">Frais ETF cumulés</div>
+      <div class="kpi-value" id="kpi-frais">—</div>
+      <div class="kpi-sub" id="kpi-frais-sub">—</div>
+    </div>
+    <div class="kpi green">
+      <span class="kpi-delta" id="delta-mult"></span>
+      <div class="kpi-label">Multiplicateur</div>
+      <div class="kpi-value" id="kpi-mult">—</div>
+      <div class="kpi-sub">× votre mise totale</div>
+    </div>
+
+    <!-- Nouvelles KPI plafond & fiscalité comparative -->
+    <div class="kpi gold">
+      <div class="kpi-label">Versements PEA / Plafond</div>
+      <div class="kpi-value" id="kpi-verse-pea">—</div>
+      <div class="kpi-sub" id="kpi-verse-pea-sub">/ 150 000 €</div>
+      <div class="kpi-progress"><div class="kpi-progress-fill" id="kpi-progress-fill"></div></div>
+    </div>
+    <div class="kpi teal">
+      <div class="kpi-label">Plafond atteint</div>
+      <div class="kpi-value" id="kpi-plafond-an">—</div>
+      <div class="kpi-sub" id="kpi-plafond-an-sub">sur la durée simulée</div>
+    </div>
+    <div class="kpi green">
+      <span class="kpi-delta" id="delta-total-all"></span>
+      <div class="kpi-label">Capital total</div>
+      <div class="kpi-value" id="kpi-total-all">—</div>
+      <div class="kpi-sub" id="kpi-total-all-sub">PEA + complément</div>
+    </div>
+    <div class="kpi purple">
+      <div class="kpi-label">Économie vs CTO</div>
+      <div class="kpi-value" id="kpi-economie">—</div>
+      <div class="kpi-sub">avantage fiscal PEA</div>
+    </div>
+
+    <!-- KPI phases de vie -->
+    <div class="kpi blue">
+      <div class="kpi-label">Phases définies</div>
+      <div class="kpi-value" id="kpi-nb-phases">—</div>
+      <div class="kpi-sub" id="kpi-nb-phases-sub">scénario constant</div>
+    </div>
+    <div class="kpi gold">
+      <div class="kpi-label">Versement moyen</div>
+      <div class="kpi-value" id="kpi-mens-moy">—</div>
+      <div class="kpi-sub">€ / mois (pondéré)</div>
+    </div>
+    <div class="kpi teal">
+      <div class="kpi-label">Rendement moyen</div>
+      <div class="kpi-value" id="kpi-taux-moy">—</div>
+      <div class="kpi-sub">% / an (pondéré)</div>
+    </div>
+    <div class="kpi purple">
+      <div class="kpi-label">Écart vs constant</div>
+      <div class="kpi-value" id="kpi-ecart-phases">—</div>
+      <div class="kpi-sub" id="kpi-ecart-phases-sub">sans personnalisation</div>
+    </div>
+  </div>
+
+  <!-- Graphiques -->
+  <div class="charts-grid">
+    <div class="card">
+      <div class="card-title">Évolution du capital</div>
+      <div class="chart-wrap" style="height:300px">
+        <canvas id="chartGrowth"></canvas>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">Composition du capital PEA</div>
+      <div class="chart-wrap" style="height:300px">
+        <canvas id="chartDoughnut"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tableau -->
+  <div class="card table-card">
+    <div class="card-title">Détail année par année</div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Année</th>
+            <th>Versé (PEA)</th>
+            <th>Plus-value</th>
+            <th>Capital PEA</th>
+            <th>Valeur réelle</th>
+            <th>Frais cumulés</th>
+            <th id="th-aude" style="display:none">Capital complément</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Simulation indicative — Plafond PEA : 150 000 € de versements nets · Frais ETF déduits annuellement · Valeur réelle = capital / (1 + inflation)ⁿ<br>
+  PS PEA 17.2 % sur plus-value · AV : abattement 4 600 €/an (couple 9 200 €) puis 24.7 % · CTO : flat tax 30 % · Rendements passés ne préjugent pas du futur
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="simulation.js"></script>
+<script src="charts.js"></script>
+<script src="ui.js"></script>
+</body>
+</html>

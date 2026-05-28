@@ -1,0 +1,34 @@
+# Configuration Claude Code
+.claude/
+
+# Configuration VS Code locale
+.vscode/
+
+# Fichiers système Windows
+Thumbs.db
+desktop.ini
+
+# Fichiers système macOS
+.DS_Store
+
+# Fichiers temporaires
+*.tmp
+*.log
+*.bak
+
+# Variables d'environnement
+.env
+.env.local
+.env.*.local
+
+# Dossiers de dépendances (pour plus tard)
+node_modules/
+
+# Builds (pour plus tard)
+dist/
+build/
+
+# Sauvegardes
+*.backup
+backup/
+archives/

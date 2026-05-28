@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Simulateur PEA – Planification patrimoniale</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #21262d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --accent:  #58a6ff;
+      --green:   #3fb950;
+      --gold:    #d29922;
+      --purple:  #a371f7;
+      --red:     #f85149;
+      --teal:    #2ea8c4;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem 1rem 4rem;
+    }
+
+    .container { max-width: 1140px; margin: 0 auto; }
+
+    /* ── Header ─────────────────────────────── */
+    header { text-align: center; margin-bottom: 2.5rem; }
+    header .badge {
+      display: inline-block;
+      background: rgba(88,166,255,.12); color: var(--accent);
+      border: 1px solid rgba(88,166,255,.3); border-radius: 999px;
+      font-size: .75rem; font-weight: 600; letter-spacing: .08em;
+      text-transform: uppercase; padding: .25rem .9rem; margin-bottom: .75rem;
+    }
+    header h1 { font-size: clamp(1.6rem,4vw,2.4rem); font-weight: 700; letter-spacing: -.02em; line-height: 1.2; }
+    header p  { color: var(--muted); margin-top: .5rem; font-size: .95rem; }
+
+    /* ── Controls ────────────────────────────── */
+    .controls-section { margin-bottom: 1rem; }
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+      gap: .85rem; margin-bottom: .75rem;
+    }
+    .controls-sep { height: 1px; background: var(--border); margin: .15rem 0 .75rem; }
+    .ctrl-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1rem 1.1rem .85rem;
+    }
+    .ctrl-label {
+      font-size: .69rem; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted); display: block; margin-bottom: .4rem;
+    }
+    .ctrl-value-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: .45rem; }
+    .ctrl-value { font-size: 1.3rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+    .ctrl-value.blue   { color: var(--accent); }
+    .ctrl-value.gold   { color: var(--gold);   }
+    .ctrl-value.green  { color: var(--green);  }
+    .ctrl-value.purple { color: var(--purple); }
+    .ctrl-value.teal   { color: var(--teal);   }
+    .ctrl-value.red    { color: var(--red);    }
+
+    .ctrl-num {
+      background: rgba(255,255,255,.05); border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text); font-size: .78rem; font-family: inherit;
+      padding: .2rem .35rem; width: 60px; text-align: center;
+      font-variant-numeric: tabular-nums; transition: border-color .15s;
+    }
+    .ctrl-num:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px rgba(88,166,255,.15); }
+    .ctrl-num::-webkit-inner-spin-button, .ctrl-num::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .ctrl-num { -moz-appearance: textfield; }
+
+    input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px; border-radius: 99px;
+      outline: none; cursor: pointer; margin: .5rem 0 .25rem;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); cursor: pointer;
+      box-shadow: 0 0 0 3px rgba(88,166,255,.22); transition: box-shadow .15s;
+    }
+    input[type=range]:hover::-webkit-slider-thumb { box-shadow: 0 0 0 5px rgba(88,166,255,.32); }
+    input[type=range]::-moz-range-thumb {
+      width: 14px; height: 14px; border-radius: 50%; background: var(--accent);
+      cursor: pointer; border: none; box-shadow: 0 0 0 3px rgba(88,166,255,.22);
+    }
+    .ctrl-minmax { display: flex; justify-content: space-between; font-size: .63rem; color: var(--muted); }
+
+    .controls-footer { display: flex; justify-content: flex-end; margin-top: .3rem; }
+    .btn-reset {
+      background: rgba(255,255,255,.04); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--muted); font-family: inherit;
+      font-size: .8rem; font-weight: 500; cursor: pointer;
+      padding: .42rem .9rem; transition: all .15s; display: flex; align-items: center; gap: .4rem;
+    }
+    .btn-reset:hover { background: rgba(255,255,255,.08); color: var(--text); border-color: rgba(255,255,255,.12); }
+
+    /* ── Collapsible ─────────────────────────── */
+    .coll-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 1rem; overflow: hidden;
+    }
+    .coll-trigger {
+      width: 100%; display: flex; align-items: center; gap: .6rem;
+      padding: .85rem 1.2rem; background: none; border: none; cursor: pointer;
+      color: var(--muted); font-family: inherit; font-size: .78rem;
+      font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+      text-align: left; transition: background .15s;
+    }
+    .coll-trigger:hover { background: rgba(255,255,255,.03); }
+    .coll-badge {
+      background: rgba(88,166,255,.14); color: var(--accent);
+      border-radius: 99px; font-size: .67rem; font-weight: 700;
+      padding: .08rem .5rem; line-height: 1.5; display: none;
+    }
+    .coll-badge.show { display: inline; }
+    .coll-arrow { margin-left: auto; font-size: 1rem; transition: transform .22s; }
+    .coll-card.open .coll-arrow { transform: rotate(90deg); }
+    .coll-body { max-height: 0; overflow: hidden; transition: max-height .3s ease; padding: 0 1.2rem; }
+    .coll-card.open .coll-body { max-height: 2000px; padding-bottom: 1.2rem; }
+
+    /* ── Versements ponctuels ────────────────── */
+    .vp-empty {
+      font-size: .82rem; color: var(--muted); border: 1px dashed var(--border);
+      border-radius: 8px; padding: .85rem 1rem; text-align: center; margin-bottom: .75rem;
+    }
+    .vp-row {
+      display: flex; align-items: flex-end; gap: .55rem; flex-wrap: wrap;
+      background: rgba(255,255,255,.022); border: 1px solid var(--border);
+      border-radius: 8px; padding: .55rem .7rem; margin-bottom: .45rem;
+    }
+    .vp-field { display: flex; flex-direction: column; gap: .18rem; }
+    .vp-field label { font-size: .61rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); white-space: nowrap; }
+    .vp-input {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      color: var(--text); font-family: inherit; font-size: .8rem;
+      padding: .22rem .45rem; transition: border-color .15s;
+    }
+    .vp-input:focus { outline: none; border-color: var(--accent); }
+    .vp-input-yr  { width: 55px; }
+    .vp-input-amt { width: 80px; }
+    .vp-input-lbl { width: 145px; }
+    .vp-input-yr::-webkit-inner-spin-button,
+    .vp-input-yr::-webkit-outer-spin-button,
+    .vp-input-amt::-webkit-inner-spin-button,
+    .vp-input-amt::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .vp-input-yr, .vp-input-amt { -moz-appearance: textfield; }
+    .vp-check-col {
+      display: flex; flex-direction: column; align-items: center; gap: .25rem;
+      font-size: .61rem; letter-spacing: .05em; text-transform: uppercase; color: var(--muted);
+    }
+    .cb-custom {
+      -webkit-appearance: none; appearance: none;
+      width: 15px; height: 15px; border: 1.5px solid var(--border); border-radius: 4px;
+      background: var(--bg); cursor: pointer; position: relative; transition: all .15s;
+    }
+    .cb-custom:checked { background: var(--accent); border-color: var(--accent); }
+    .cb-custom:checked::after {
+      content: ''; position: absolute; left: 3px; top: 0px;
+      width: 5px; height: 9px; border: 2px solid #fff;
+      border-top: none; border-left: none; transform: rotate(45deg);
+    }
+    .cb-custom:focus { outline: 2px solid rgba(88,166,255,.35); outline-offset: 1px; }
+    .vp-btn-del {
+      background: rgba(248,81,73,.08); border: 1px solid rgba(248,81,73,.22);
+      border-radius: 6px; color: var(--red); cursor: pointer; font-family: inherit;
+      font-size: .73rem; padding: .32rem .55rem; transition: all .15s; flex-shrink: 0; align-self: flex-end;
+    }
+    .vp-btn-del:hover { background: rgba(248,81,73,.18); }
+    .btn-vp-add {
+      width: 100%; text-align: center; padding: .52rem 1rem;
+      background: rgba(88,166,255,.05); border: 1px dashed rgba(88,166,255,.22);
+      border-radius: 8px; color: var(--accent); font-family: inherit;
+      font-size: .8rem; font-weight: 500; cursor: pointer; transition: all .15s;
+    }
+    .btn-vp-add:hover { background: rgba(88,166,255,.11); }
+
+    /* ── Fiscalité ───────────────────────────── */
+    .fisc-cb-row { display: flex; align-items: center; gap: .7rem; margin-bottom: .9rem; }
+    .fisc-cb-row label { font-size: .88rem; color: var(--text); cursor: pointer; }
+    .fisc-comparison { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; }
+    @media (max-width: 580px) { .fisc-comparison { grid-template-columns: 1fr; } }
+    .fisc-box {
+      background: rgba(255,255,255,.022); border: 1px solid var(--border);
+      border-radius: 8px; padding: .85rem 1rem;
+    }
+    .fisc-box-title {
+      font-size: .7rem; font-weight: 600; letter-spacing: .06em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: .65rem;
+      display: flex; align-items: center; gap: .4rem;
+    }
+    .fisc-line { display: flex; justify-content: space-between; font-size: .84rem; padding: .2rem 0; }
+    .fisc-line-total { border-top: 1px solid var(--border); margin-top: .35rem; padding-top: .42rem; font-weight: 600; }
+    .fisc-lbl { color: var(--muted); }
+    .fisc-pos { color: var(--green); }
+    .fisc-neg { color: var(--red); }
+    .fisc-avantage {
+      grid-column: 1/-1; text-align: center;
+      background: rgba(63,185,80,.07); border: 1px solid rgba(63,185,80,.2);
+      border-radius: 8px; padding: .6rem; font-size: .88rem; font-weight: 600; color: var(--green);
+    }
+
+    /* ── KPI cards ───────────────────────────── */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+      gap: .85rem; margin-bottom: 1.5rem;
+    }
+    .kpi {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.15rem 1.2rem; position: relative; overflow: hidden;
+    }
+    .kpi::before {
+      content: ''; position: absolute; top: 0; left: 0; right: 0;
+      height: 3px; border-radius: 12px 12px 0 0;
+    }
+    .kpi.blue::before   { background: var(--accent); }
+    .kpi.green::before  { background: var(--green);  }
+    .kpi.gold::before   { background: var(--gold);   }
+    .kpi.purple::before { background: var(--purple); }
+    .kpi.teal::before   { background: var(--teal);   }
+    .kpi.red::before    { background: var(--red);    }
+    .kpi-label { font-size: .7rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: .5rem; }
+    .kpi-value { font-size: 1.4rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+    .kpi.blue   .kpi-value { color: var(--accent); }
+    .kpi.green  .kpi-value { color: var(--green);  }
+    .kpi.gold   .kpi-value { color: var(--gold);   }
+    .kpi.purple .kpi-value { color: var(--purple); }
+    .kpi.teal   .kpi-value { color: var(--teal);   }
+    .kpi.red    .kpi-value { color: var(--red);    }
+    .kpi-sub { font-size: .72rem; color: var(--muted); margin-top: .38rem; }
+    .kpi-delta {
+      position: absolute; top: .68rem; right: .68rem;
+      font-size: .63rem; font-weight: 700; padding: .14rem .38rem;
+      border-radius: 5px; line-height: 1.3; display: none;
+    }
+    .kpi-delta.pos { display: inline; background: rgba(63,185,80,.14); color: var(--green); }
+    .kpi-delta.neg { display: inline; background: rgba(248,81,73,.14); color: var(--red);   }
+
+    /* ── Charts ──────────────────────────────── */
+    .charts-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 1rem; margin-bottom: 1rem; }
+    @media (max-width: 720px) { .charts-grid { grid-template-columns: 1fr; } }
+    .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; }
+    .card-title { font-size: .78rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 1.15rem; }
+    .chart-wrap { position: relative; }
+
+    /* ── Table ───────────────────────────────── */
+    .table-card { margin-bottom: 1rem; }
+    table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+    thead th {
+      text-align: left; padding: .52rem .7rem; font-size: .7rem;
+      letter-spacing: .06em; text-transform: uppercase; color: var(--muted);
+      border-bottom: 1px solid var(--border);
+    }
+    thead th:not(:first-child) { text-align: right; }
+    tbody tr { border-bottom: 1px solid rgba(33,38,45,.7); }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: rgba(255,255,255,.03); }
+    tbody td { padding: .52rem .7rem; color: var(--text); }
+    tbody td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+    .td-year  { color: var(--muted); font-size: .8rem; }
+    .td-total { color: var(--green); font-weight: 600; }
+    .td-gain  { color: var(--gold);  }
+    .td-reel  { color: var(--teal);  }
+    .td-frais { color: var(--red);   }
+
+    footer { text-align: center; margin-top: 3rem; font-size: .77rem; color: var(--muted); line-height: 1.7; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <header>
+    <div class="badge">Plan d'Épargne en Actions</div>
+    <h1>Simulateur PEA<br>Planification patrimoniale</h1>
+    <p id="header-sub">Projection sur 20 ans avec intérêts composés mensuels</p>
+  </header>
+
+  <!-- Controls – bloc 1 (4 params) -->
+  <div class="controls-section">
+    <div class="controls-grid">
+      <div class="ctrl-card">
+        <span class="ctrl-label">Versement mensuel</span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value blue" id="cv-mensuel">200 €</span>
+          <input class="ctrl-num" type="number" id="n-mensuel" min="50" max="2000" step="10" value="200">
+        </div>
+        <input type="range" id="s-mensuel" min="50" max="2000" step="10" value="200">
+        <div class="ctrl-minmax"><span>50 €</span><span>2 000 €</span></div>
+      </div>
+      <div class="ctrl-card">
+        <span class="ctrl-label">Rendement annuel brut</span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value gold" id="cv-taux">7 %</span>
+          <input class="ctrl-num" type="number" id="n-taux" min="0" max="15" step="0.1" value="7">
+        </div>
+        <input type="range" id="s-taux" min="0" max="15" step="0.1" value="7">
+        <div class="ctrl-minmax"><span>0 %</span><span>15 %</span></div>
+      </div>
+      <div class="ctrl-card">
+        <span class="ctrl-label">Durée</span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value green" id="cv-duree">20 ans</span>
+          <input class="ctrl-num" type="number" id="n-duree" min="1" max="40" step="1" value="20">
+        </div>
+        <input type="range" id="s-duree" min="1" max="40" step="1" value="20">
+        <div class="ctrl-minmax"><span>1 an</span><span>40 ans</span></div>
+      </div>
+      <div class="ctrl-card">
+        <span class="ctrl-label">Apport initial</span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value purple" id="cv-apport">0 €</span>
+          <input class="ctrl-num" type="number" id="n-apport" min="0" max="50000" step="100" value="0">
+        </div>
+        <input type="range" id="s-apport" min="0" max="50000" step="100" value="0">
+        <div class="ctrl-minmax"><span>0 €</span><span>50 000 €</span></div>
+      </div>
+    </div>
+
+    <div class="controls-sep"></div>
+
+    <!-- Controls – bloc 2 (3 params) -->
+    <div class="controls-grid">
+      <div class="ctrl-card">
+        <span class="ctrl-label">Inflation annuelle</span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value teal" id="cv-inflation">2 %</span>
+          <input class="ctrl-num" type="number" id="n-inflation" min="0" max="5" step="0.1" value="2">
+        </div>
+        <input type="range" id="s-inflation" min="0" max="5" step="0.1" value="2">
+        <div class="ctrl-minmax"><span>0 %</span><span>5 %</span></div>
+      </div>
+      <div class="ctrl-card">
+        <span class="ctrl-label">Frais annuels ETF (TER)</span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value red" id="cv-frais">0.25 %</span>
+          <input class="ctrl-num" type="number" id="n-frais" min="0" max="1" step="0.05" value="0.25">
+        </div>
+        <input type="range" id="s-frais" min="0" max="1" step="0.05" value="0.25">
+        <div class="ctrl-minmax"><span>0 %</span><span>1 %</span></div>
+      </div>
+      <div class="ctrl-card">
+        <span class="ctrl-label">Hausse versements / an</span>
+        <div class="ctrl-value-row">
+          <span class="ctrl-value gold" id="cv-aug">0 %</span>
+          <input class="ctrl-num" type="number" id="n-aug" min="0" max="10" step="0.5" value="0">
+        </div>
+        <input type="range" id="s-aug" min="0" max="10" step="0.5" value="0">
+        <div class="ctrl-minmax"><span>0 %</span><span>10 %</span></div>
+      </div>
+    </div>
+
+    <div class="controls-footer">
+      <button class="btn-reset" id="btn-reset">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+          <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+          <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+        </svg>
+        Réinitialiser
+      </button>
+    </div>
+  </div>
+
+  <!-- Versements ponctuels -->
+  <div class="coll-card" id="coll-vp">
+    <button class="coll-trigger" onclick="toggleColl('coll-vp')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+      </svg>
+      Versements ponctuels
+      <span class="coll-badge" id="vp-count"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+      <div id="vp-list"></div>
+      <button class="btn-vp-add" id="btn-vp-add">+ Ajouter un versement (prime, bonus, héritage…)</button>
+    </div>
+  </div>
+
+  <!-- Fiscalité -->
+  <div class="coll-card" id="coll-fisc">
+    <button class="coll-trigger" onclick="toggleColl('coll-fisc')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M1 4.5A1.5 1.5 0 0 1 2.5 3h11A1.5 1.5 0 0 1 15 4.5v.793l-6.674 3.222a2.25 2.25 0 0 1-1.652 0L1 5.293V4.5zm0 2.3v4.7A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5V6.8l-6.022 2.908a3.25 3.25 0 0 1-2.956 0L1 6.8z"/>
+      </svg>
+      Fiscalité
+      <span class="coll-badge" id="fisc-badge" style="background:rgba(163,113,247,.14);color:var(--purple)"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+      <div class="fisc-cb-row">
+        <input class="cb-custom" type="checkbox" id="cb-fisc">
+        <label for="cb-fisc">Appliquer la fiscalité PEA — sortie après 5 ans · prélèvements sociaux 17.2 % sur la plus-value uniquement</label>
+      </div>
+      <div id="fisc-details"></div>
+    </div>
+  </div>
+
+  <!-- 7 KPI cards -->
+  <div class="kpi-grid">
+    <div class="kpi green">
+      <span class="kpi-delta" id="delta-final"></span>
+      <div class="kpi-label">Capital final</div>
+      <div class="kpi-value" id="kpi-final">—</div>
+      <div class="kpi-sub" id="kpi-final-sub">valeur nominale</div>
+    </div>
+    <div class="kpi teal">
+      <span class="kpi-delta" id="delta-reel"></span>
+      <div class="kpi-label">Valeur réelle</div>
+      <div class="kpi-value" id="kpi-reel">—</div>
+      <div class="kpi-sub" id="kpi-reel-sub">pouvoir d'achat actuel</div>
+    </div>
+    <div class="kpi blue">
+      <span class="kpi-delta" id="delta-verse"></span>
+      <div class="kpi-label">Total versé</div>
+      <div class="kpi-value" id="kpi-verse">—</div>
+      <div class="kpi-sub" id="kpi-verse-sub">—</div>
+    </div>
+    <div class="kpi gold">
+      <span class="kpi-delta" id="delta-brut"></span>
+      <div class="kpi-label">Plus-value brute</div>
+      <div class="kpi-value" id="kpi-brut">—</div>
+      <div class="kpi-sub" id="kpi-brut-sub">—</div>
+    </div>
+    <div class="kpi purple">
+      <span class="kpi-delta" id="delta-net"></span>
+      <div class="kpi-label">Plus-value nette</div>
+      <div class="kpi-value" id="kpi-net">—</div>
+      <div class="kpi-sub" id="kpi-net-sub">—</div>
+    </div>
+    <div class="kpi red">
+      <span class="kpi-delta" id="delta-frais"></span>
+      <div class="kpi-label">Frais ETF cumulés</div>
+      <div class="kpi-value" id="kpi-frais">—</div>
+      <div class="kpi-sub" id="kpi-frais-sub">—</div>
+    </div>
+    <div class="kpi green">
+      <span class="kpi-delta" id="delta-mult"></span>
+      <div class="kpi-label">Multiplicateur</div>
+      <div class="kpi-value" id="kpi-mult">—</div>
+      <div class="kpi-sub">× votre mise totale</div>
+    </div>
+  </div>
+
+  <!-- Charts -->
+  <div class="charts-grid">
+    <div class="card">
+      <div class="card-title">Évolution du capital – 3 courbes</div>
+      <div class="chart-wrap" style="height:300px"><canvas id="chartGrowth"></canvas></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Composition du capital final</div>
+      <div class="chart-wrap" style="height:300px"><canvas id="chartDoughnut"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Table -->
+  <div class="card table-card">
+    <div class="card-title">Détail année par année</div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Année</th>
+            <th>Total versé</th>
+            <th>Plus-value</th>
+            <th>Capital total</th>
+            <th>Valeur réelle</th>
+            <th>Frais cumulés</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Simulation indicative — Frais ETF déduits annuellement sur le capital · Valeur réelle = capital / (1 + inflation)ⁿ<br>
+  Versements ponctuels ajoutés en fin d'année · PS PEA 17.2 % sur plus-value uniquement (sortie après 5 ans) · Rendements passés ne préjugent pas du futur
+</footer>
+
+<script>
+/* ── Constantes & état ──────────────────────────────────────── */
+const DEFAULTS = { mensuel:200, taux:7, duree:20, apport:0, inflation:2, frais:0.25, aug:0 };
+let vpId = 0;
+let vps  = [];   // versements ponctuels : [{id, annee, montant, libelle, recurrent}]
+
+/* ── Formatage ─────────────────────────────────────────────── */
+const fmt    = n => n.toLocaleString('fr-FR', { style:'currency', currency:'EUR', maximumFractionDigits:0 });
+const fmtAbs = n => Math.abs(n).toLocaleString('fr-FR', { style:'currency', currency:'EUR', maximumFractionDigits:0 });
+
+/* ── Calcul central ────────────────────────────────────────── */
+function compute({ mensuel, taux, duree, apport, inflation, frais, aug }) {
+  const tauxM   = taux     / 100 / 12;
+  const fraisR  = frais    / 100;
+  const augR    = aug      / 100;
+  const inflR   = inflation / 100;
+
+  const yrs=[], versL=[], gainL=[], totL=[], reelL=[], fraisL=[];
+  let cap = apport, versé = apport, fraisCum = 0;
+
+  for (let an = 1; an <= duree; an++) {
+    const mens = mensuel * Math.pow(1 + augR, an - 1);
+    for (let m = 0; m < 12; m++) {
+      cap  = (cap + mens) * (1 + tauxM);
+      versé += mens;
+    }
+    const f = cap * fraisR;
+    cap -= f; fraisCum += f;
+
+    // Versements ponctuels
+    for (const v of vps) {
+      const ok = v.recurrent ? an >= (v.annee || 1) : an === v.annee;
+      if (ok && v.montant > 0) { cap += v.montant; versé += v.montant; }
+    }
+
+    yrs.push(an);
+    versL.push(versé);
+    gainL.push(Math.max(0, cap - versé));
+    totL.push(cap);
+    reelL.push(cap / Math.pow(1 + inflR, an));
+    fraisL.push(fraisCum);
+  }
+
+  const i = totL.length - 1;
+  if (i < 0) return { yrs:[], versL:[], gainL:[], totL:[], reelL:[], fraisL:[],
+    versé:0, final:0, gain:0, reel:0, fraisTot:0, mult:0 };
+  return {
+    yrs, versL, gainL, totL, reelL, fraisL,
+    versé:  versL[i],
+    final:  totL[i],
+    gain:   gainL[i],
+    reel:   reelL[i],
+    fraisTot: fraisL[i],
+    mult:   versL[i] > 0 ? totL[i] / versL[i] : 0,
+  };
+}
+
+/* ── Scénario de référence (pour les deltas) ───────────────── */
+const DEF = compute(DEFAULTS);
+let curFinal = DEF.final;
+
+/* ── Slider fill ────────────────────────────────────────────── */
+function fill(sl) {
+  const p = ((+sl.value - +sl.min) / (+sl.max - +sl.min)) * 100;
+  sl.style.background = `linear-gradient(to right,var(--accent) ${p}%,#21262d ${p}%)`;
+}
+
+/* ── Sync slider ↔ number ───────────────────────────────────── */
+function wire(sId, nId, cb) {
+  const sl = document.getElementById(sId), nu = document.getElementById(nId);
+  fill(sl);
+  const sync = () => { const v = Math.min(+sl.max, Math.max(+sl.min, +nu.value||0)); sl.value=v; fill(sl); cb(); };
+  sl.addEventListener('input', () => { nu.value = sl.value; fill(sl); cb(); });
+  nu.addEventListener('input',  sync);
+  nu.addEventListener('change', () => { nu.value = Math.min(+sl.max,Math.max(+sl.min,+nu.value||0)); sync(); });
+}
+
+/* ── Delta badge ────────────────────────────────────────────── */
+function setDelta(id, cur, ref, isCur=true, invert=false) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  const d = cur - ref, thr = isCur ? 0.5 : 0.001;
+  if (Math.abs(d) < thr) { el.textContent=''; el.className='kpi-delta'; return; }
+  el.textContent = isCur
+    ? (d>0?'+':'−') + fmtAbs(d)
+    : (d>0?'+':'') + d.toFixed(2) + '×';
+  const good = invert ? d < 0 : d > 0;
+  el.className = 'kpi-delta ' + (good ? 'pos' : 'neg');
+}
+
+/* ── Chart.js defaults ──────────────────────────────────────── */
+Chart.defaults.color       = '#8b949e';
+Chart.defaults.font.family = '-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif';
+Chart.defaults.font.size   = 12;
+
+const TT = { backgroundColor:'#161b22', borderColor:'#21262d', borderWidth:1, padding:12 };
+
+/* ── Graphique 1 : 3 courbes lignes ─────────────────────────── */
+const chartGrowth = new Chart(document.getElementById('chartGrowth'), {
+  type: 'line',
+  data: {
+    labels: [],
+    datasets: [
+      { label:'Capital nominal',
+        data:[], borderColor:'#3fb950', backgroundColor:'rgba(63,185,80,.07)',
+        fill:true, tension:.35, borderWidth:2, pointRadius:2, pointHoverRadius:5 },
+      { label:'Valeur réelle (pouvoir d\'achat)',
+        data:[], borderColor:'#2ea8c4', backgroundColor:'transparent',
+        fill:false, tension:.35, borderWidth:1.5, borderDash:[6,4], pointRadius:0, pointHoverRadius:4 },
+      { label:'Total versé',
+        data:[], borderColor:'#58a6ff', backgroundColor:'transparent',
+        fill:false, tension:0, borderWidth:1.5, borderDash:[3,3], pointRadius:0, pointHoverRadius:4 },
+    ],
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false, animation:{duration:200},
+    interaction:{ mode:'index', intersect:false },
+    plugins: {
+      legend:{ position:'bottom', labels:{ boxWidth:22, padding:14, usePointStyle:true, pointStyleWidth:18 } },
+      tooltip:{ ...TT, callbacks:{ label: ctx => ` ${ctx.dataset.label} : ${fmt(ctx.parsed.y)}` } },
+    },
+    scales: {
+      x:{ grid:{color:'rgba(33,38,45,.8)'}, ticks:{maxTicksLimit:10} },
+      y:{ grid:{color:'rgba(33,38,45,.8)'},
+          ticks:{ callback: v => v>=1e6?`${(v/1e6).toFixed(1)}M €`:v>=1000?`${(v/1000).toFixed(0)}k €`:`${v} €` } },
+    },
+  },
+});
+
+/* ── Graphique 2 : donut ────────────────────────────────────── */
+const chartDonut = new Chart(document.getElementById('chartDoughnut'), {
+  type: 'doughnut',
+  data: {
+    labels: ['Capital versé','Plus-value'],
+    datasets:[{ data:[0,0],
+      backgroundColor:['rgba(88,166,255,.85)','rgba(210,153,34,.85)'],
+      borderColor:    ['rgba(88,166,255,1)',   'rgba(210,153,34,1)'],
+      borderWidth:2, hoverOffset:10 }],
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false, animation:{duration:200}, cutout:'72%',
+    plugins:{
+      legend:{ position:'bottom', labels:{ boxWidth:12, padding:14 } },
+      tooltip:{ ...TT, callbacks:{ label: ctx => {
+        const tot = ctx.dataset.data.reduce((a,b)=>a+b,0);
+        return ` ${ctx.label} : ${fmt(ctx.parsed)} (${tot>0?(ctx.parsed/tot*100).toFixed(1):0}%)`;
+      }}},
+    },
+  },
+  plugins:[{
+    id:'center',
+    afterDraw(ch) {
+      const { ctx, chartArea:{width,height,top} } = ch;
+      ctx.save();
+      const cx=width/2, cy=top+height/2, fs=Math.max(12,Math.min(18,width*.085));
+      ctx.textAlign='center';
+      ctx.fillStyle='#e6edf3'; ctx.font=`bold ${fs}px -apple-system,sans-serif`;
+      ctx.fillText(fmt(curFinal), cx, cy-3);
+      ctx.fillStyle='#8b949e'; ctx.font=`${Math.max(9,fs*.65)}px -apple-system,sans-serif`;
+      ctx.fillText('capital final', cx, cy+fs*.9);
+      ctx.restore();
+    },
+  }],
+});
+
+/* ── Collapsible ────────────────────────────────────────────── */
+function toggleColl(id) { document.getElementById(id).classList.toggle('open'); }
+
+/* ── Render versements ponctuels ────────────────────────────── */
+function renderVP() {
+  const duree  = +document.getElementById('n-duree').value || 20;
+  const list   = document.getElementById('vp-list');
+  const badge  = document.getElementById('vp-count');
+
+  if (vps.length === 0) {
+    list.innerHTML = `<p class="vp-empty">Aucun versement ponctuel. Ajoutez une prime, un bonus ou un héritage prévu.</p>`;
+    badge.textContent = ''; badge.classList.remove('show');
+  } else {
+    list.innerHTML = vps.map(v => `
+      <div class="vp-row" data-id="${v.id}">
+        <div class="vp-field">
+          <label class="lbl-yr">${v.recurrent?"Dès l'an":"Année"}</label>
+          <input class="vp-input vp-input-yr vp-yr" type="number" min="1" max="${duree}" value="${Math.min(v.annee,duree)}">
+        </div>
+        <div class="vp-field">
+          <label>Montant (€)</label>
+          <input class="vp-input vp-input-amt vp-amt" type="number" min="0" step="100" value="${v.montant}">
+        </div>
+        <div class="vp-field" style="flex:1;min-width:110px">
+          <label>Libellé</label>
+          <input class="vp-input vp-input-lbl vp-lbl" type="text" placeholder="Prime, bonus, héritage…" value="${v.libelle}" style="width:100%">
+        </div>
+        <div class="vp-check-col">
+          <label>Récurrent</label>
+          <input class="cb-custom vp-rec" type="checkbox" ${v.recurrent?'checked':''}>
+        </div>
+        <button class="vp-btn-del" title="Supprimer">✕</button>
+      </div>`).join('');
+    badge.textContent = vps.length; badge.classList.add('show');
+  }
+}
+
+document.getElementById('vp-list').addEventListener('change', e => {
+  const row = e.target.closest('[data-id]'); if (!row) return;
+  const v = vps.find(x => x.id === +row.dataset.id); if (!v) return;
+  if (e.target.classList.contains('vp-yr'))  { v.annee    = +e.target.value; update(); }
+  if (e.target.classList.contains('vp-amt')) { v.montant  = +e.target.value; update(); }
+  if (e.target.classList.contains('vp-lbl')) { v.libelle  = e.target.value; }
+  if (e.target.classList.contains('vp-rec')) {
+    v.recurrent = e.target.checked;
+    const lbl = row.querySelector('.lbl-yr');
+    if (lbl) lbl.textContent = v.recurrent ? "Dès l'an" : 'Année';
+    update();
+  }
+});
+
+document.getElementById('vp-list').addEventListener('click', e => {
+  const btn = e.target.closest('.vp-btn-del'); if (!btn) return;
+  const row = btn.closest('[data-id]'); if (!row) return;
+  vps = vps.filter(x => x.id !== +row.dataset.id);
+  renderVP(); update();
+});
+
+document.getElementById('btn-vp-add').addEventListener('click', () => {
+  vps.push({ id: ++vpId, annee:1, montant:1000, libelle:'', recurrent:false });
+  document.getElementById('coll-vp').classList.add('open');
+  renderVP(); update();
+});
+
+/* ── Render fiscalité comparison ────────────────────────────── */
+function renderFisc(gain, final) {
+  const div   = document.getElementById('fisc-details');
+  const badge = document.getElementById('fisc-badge');
+  const on    = document.getElementById('cb-fisc').checked;
+  badge.textContent = on ? 'PEA' : '';
+  badge.classList.toggle('show', on);
+  if (!on || gain <= 0) { div.innerHTML = ''; return; }
+
+  const psPS   = gain * 0.172,   netPEA = final - psPS;
+  const flat   = gain * 0.30,    netCTO = final - flat;
+  const avt    = netPEA - netCTO;
+
+  div.innerHTML = `
+    <div class="fisc-comparison">
+      <div class="fisc-box">
+        <div class="fisc-box-title">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block"></span>
+          PEA — sortie après 5 ans
+        </div>
+        <div class="fisc-line"><span class="fisc-lbl">Plus-value brute</span><span>${fmt(gain)}</span></div>
+        <div class="fisc-line"><span class="fisc-lbl">Prélèvements sociaux 17.2 %</span><span class="fisc-neg">− ${fmt(psPS)}</span></div>
+        <div class="fisc-line fisc-line-total"><span class="fisc-lbl">Capital net</span><span class="fisc-pos">${fmt(netPEA)}</span></div>
+      </div>
+      <div class="fisc-box">
+        <div class="fisc-box-title">
+          <span style="width:8px;height:8px;border-radius:50%;background:var(--muted);display:inline-block"></span>
+          CTO — Flat tax 30 % (PFU)
+        </div>
+        <div class="fisc-line"><span class="fisc-lbl">Plus-value brute</span><span>${fmt(gain)}</span></div>
+        <div class="fisc-line"><span class="fisc-lbl">Impôt PFU 30 %</span><span class="fisc-neg">− ${fmt(flat)}</span></div>
+        <div class="fisc-line fisc-line-total"><span class="fisc-lbl">Capital net</span><span>${fmt(netCTO)}</span></div>
+      </div>
+      <div class="fisc-avantage">Avantage fiscal PEA vs CTO : <strong>+ ${fmt(avt)}</strong></div>
+    </div>`;
+}
+
+/* ── Update ─────────────────────────────────────────────────── */
+function update() {
+  const mensuel   = +document.getElementById('n-mensuel').value;
+  const taux      = +document.getElementById('n-taux').value;
+  const duree     = +document.getElementById('n-duree').value;
+  const apport    = +document.getElementById('n-apport').value;
+  const inflation = +document.getElementById('n-inflation').value;
+  const frais     = +document.getElementById('n-frais').value;
+  const aug       = +document.getElementById('n-aug').value;
+  const fiscOn    = document.getElementById('cb-fisc').checked;
+
+  const d = compute({ mensuel, taux, duree, apport, inflation, frais, aug });
+  curFinal = d.final;
+
+  /* Ctrl display values */
+  document.getElementById('cv-mensuel').textContent  = mensuel + ' €';
+  document.getElementById('cv-taux').textContent     = taux + ' %';
+  document.getElementById('cv-duree').textContent    = duree + ' an' + (duree > 1 ? 's' : '');
+  document.getElementById('cv-apport').textContent   = fmt(apport);
+  document.getElementById('cv-inflation').textContent = inflation + ' %';
+  document.getElementById('cv-frais').textContent    = frais + ' %';
+  document.getElementById('cv-aug').textContent      = aug + ' %';
+
+  document.getElementById('header-sub').textContent =
+    `Projection sur ${duree} an${duree>1?'s':''} avec intérêts composés mensuels`;
+
+  /* KPI – Capital final */
+  document.getElementById('kpi-final').textContent     = fmt(d.final);
+  document.getElementById('kpi-final-sub').textContent = `après ${duree} an${duree>1?'s':''}`;
+
+  /* KPI – Valeur réelle */
+  const erosion = d.final > 0 ? ((1 - d.reel / d.final) * 100).toFixed(0) : 0;
+  document.getElementById('kpi-reel').textContent     = fmt(d.reel);
+  document.getElementById('kpi-reel-sub').textContent = `− ${erosion} % d'érosion inflation`;
+
+  /* KPI – Total versé */
+  const nbMois = duree * 12;
+  const mensF  = mensuel * Math.pow(1 + aug/100, duree - 1);
+  let subVerse = `${nbMois} mois`;
+  if (apport > 0)   subVerse += ` + ${fmt(apport)} initial`;
+  if (aug > 0)      subVerse += ` · ${mensuel}→${Math.round(mensF)} €/mois`;
+  if (vps.length>0) subVerse += ` + ${vps.length} versement${vps.length>1?'s':''} ponctuel${vps.length>1?'s':''}`;
+  document.getElementById('kpi-verse').textContent     = fmt(d.versé);
+  document.getElementById('kpi-verse-sub').textContent = subVerse;
+
+  /* KPI – Plus-value brute */
+  const gainPct = d.versé > 0 ? ((d.gain / d.versé) * 100).toFixed(0) : 0;
+  document.getElementById('kpi-brut').textContent     = fmt(d.gain);
+  document.getElementById('kpi-brut-sub').textContent = `+ ${gainPct} % de la mise`;
+
+  /* KPI – Plus-value nette */
+  const gainNet = fiscOn ? d.gain * (1 - 0.172) : d.gain;
+  document.getElementById('kpi-net').textContent     = fmt(gainNet);
+  document.getElementById('kpi-net-sub').textContent = fiscOn ? 'après PS 17.2 % (PEA)' : 'sans fiscalité appliquée';
+
+  /* KPI – Frais ETF */
+  const fraisPct = (d.final + d.fraisTot) > 0 ? (d.fraisTot / (d.final + d.fraisTot) * 100).toFixed(1) : 0;
+  document.getElementById('kpi-frais').textContent     = fmt(d.fraisTot);
+  document.getElementById('kpi-frais-sub').textContent = `${fraisPct} % du capital brut`;
+
+  /* KPI – Multiplicateur */
+  document.getElementById('kpi-mult').textContent = `× ${d.mult.toFixed(2)}`;
+
+  /* Deltas */
+  setDelta('delta-final',  d.final,   DEF.final);
+  setDelta('delta-reel',   d.reel,    DEF.reel);
+  setDelta('delta-verse',  d.versé,   DEF.versé);
+  setDelta('delta-brut',   d.gain,    DEF.gain);
+  const defNet = fiscOn ? DEF.gain * 0.828 : DEF.gain;
+  setDelta('delta-net',    gainNet,   defNet);
+  setDelta('delta-frais',  d.fraisTot, DEF.fraisTot, true, true); // invert: moins = bien
+  setDelta('delta-mult',   d.mult,    DEF.mult, false);
+
+  /* Fiscalité */
+  renderFisc(d.gain, d.final);
+
+  /* Maj max des années VP */
+  document.querySelectorAll('.vp-yr').forEach(el => { el.max = duree; });
+
+  /* Graphique 1 */
+  chartGrowth.data.labels            = d.yrs.map(y => `An ${y}`);
+  chartGrowth.data.datasets[0].data  = d.totL;
+  chartGrowth.data.datasets[1].data  = d.reelL;
+  chartGrowth.data.datasets[2].data  = d.versL;
+  chartGrowth.update();
+
+  /* Graphique 2 */
+  chartDonut.data.datasets[0].data   = [d.versé, d.gain];
+  chartDonut.update();
+
+  /* Tableau */
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  d.yrs.forEach((an, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td class="td-year">Année ${an}</td>
+      <td>${fmt(d.versL[i])}</td>
+      <td class="td-gain">${fmt(d.gainL[i])}</td>
+      <td class="td-total">${fmt(d.totL[i])}</td>
+      <td class="td-reel">${fmt(d.reelL[i])}</td>
+      <td class="td-frais">${fmt(d.fraisL[i])}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+/* ── Câblage sliders ─────────────────────────────────────────── */
+wire('s-mensuel',   'n-mensuel',   update);
+wire('s-taux',      'n-taux',      update);
+wire('s-duree',     'n-duree',     update);
+wire('s-apport',    'n-apport',    update);
+wire('s-inflation', 'n-inflation', update);
+wire('s-frais',     'n-frais',     update);
+wire('s-aug',       'n-aug',       update);
+document.getElementById('cb-fisc').addEventListener('change', update);
+
+/* ── Réinitialiser ───────────────────────────────────────────── */
+document.getElementById('btn-reset').addEventListener('click', () => {
+  const r = (sId, nId, val) => {
+    const sl=document.getElementById(sId), nu=document.getElementById(nId);
+    sl.value=nu.value=val; fill(sl);
+  };
+  r('s-mensuel','n-mensuel',DEFAULTS.mensuel);
+  r('s-taux','n-taux',DEFAULTS.taux);
+  r('s-duree','n-duree',DEFAULTS.duree);
+  r('s-apport','n-apport',DEFAULTS.apport);
+  r('s-inflation','n-inflation',DEFAULTS.inflation);
+  r('s-frais','n-frais',DEFAULTS.frais);
+  r('s-aug','n-aug',DEFAULTS.aug);
+  document.getElementById('cb-fisc').checked = false;
+  vps = []; renderVP(); update();
+});
+
+/* ── Init ────────────────────────────────────────────────────── */
+renderVP();
+update();
+</script>
+</body>
+</html>
