@@ -312,8 +312,14 @@ input[type=range]::-moz-range-thumb {
 
 .kpi {
   background: var(--surface); border: 1px solid var(--border);
-  border-radius: 12px; padding: 1.15rem 1.2rem; position: relative; overflow: hidden;
+  border-radius: 12px; padding: 1.15rem 1.2rem; overflow: hidden;
+  display: flex; flex-direction: column; position: relative;
 }
+.kpi-label    { order: 1; }
+.kpi-delta    { order: 2; }
+.kpi-value    { order: 3; }
+.kpi-sub      { order: 4; }
+.kpi-progress { order: 5; }
 
 .kpi::before {
   content: ''; position: absolute; top: 0; left: 0; right: 0;
@@ -344,14 +350,13 @@ input[type=range]::-moz-range-thumb {
 
 .kpi-sub { font-size: .72rem; color: var(--muted); margin-top: .38rem; }
 
-/* Badge delta */
+/* Badge delta — texte sous le titre, sans pill */
 .kpi-delta {
-  position: absolute; top: .68rem; right: .68rem;
-  font-size: .63rem; font-weight: 700; padding: .14rem .38rem;
-  border-radius: 5px; line-height: 1.3; display: none;
+  font-size: .72rem; font-weight: 600; display: none;
+  margin-bottom: .2rem; line-height: 1.2;
 }
-.kpi-delta.pos { display: inline; background: rgba(63,185,80,.14); color: var(--green); }
-.kpi-delta.neg { display: inline; background: rgba(248,81,73,.14); color: var(--red);   }
+.kpi-delta.pos { display: block; color: var(--green); }
+.kpi-delta.neg { display: block; color: var(--red);   }
 
 /* ── Charts ──────────────────────────────────────────────── */
 .charts-grid {
@@ -748,19 +753,6 @@ footer {
     padding-left: 1.4rem;
     padding-right: 1.4rem;
   }
-
-  /* 1.2 — Deltas KPI qui chevauchent les titres */
-  .kpi {
-    display: flex;
-    flex-direction: column;
-  }
-  .kpi-label    { order: 1; }
-  .kpi-delta    { order: 2; position: static; margin-top: .2rem; align-self: flex-start; }
-  .kpi-delta.pos,
-  .kpi-delta.neg { display: inline-block; }
-  .kpi-value    { order: 3; }
-  .kpi-sub      { order: 4; }
-  .kpi-progress { order: 5; }
 
   /* 1.3 — Tableau tronqué : largeur minimale pour éviter l'effondrement */
   .table-overflow-wrap table {

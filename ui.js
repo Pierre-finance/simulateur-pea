@@ -213,9 +213,14 @@ function setDelta(id, cur, ref, isCur = true, invert = false) {
   if (Math.abs(d) < (isCur ? 0.5 : 0.001)) {
     el.textContent = ''; el.className = 'kpi-delta'; return;
   }
-  el.textContent = isCur
-    ? (d > 0 ? '+' : '−') + fmtAbs(d)
-    : (d > 0 ? '+' : '')  + d.toFixed(2) + '×';
+  if (isCur) {
+    const sign   = d > 0 ? '+' : '−';
+    const pct    = ref !== 0 ? Math.round(Math.abs(d / ref) * 100) : null;
+    const pctStr = pct != null ? ` (${d > 0 ? '+' : '−'}${pct} %)` : '';
+    el.textContent = sign + fmtAbs(d) + pctStr;
+  } else {
+    el.textContent = (d > 0 ? '+' : '') + d.toFixed(2) + '×';
+  }
   const good = invert ? d < 0 : d > 0;
   el.className = 'kpi-delta ' + (good ? 'pos' : 'neg');
 }
@@ -670,13 +675,15 @@ function startCompare(id) {
     const ecartStr = row.noEcart ? '—' : (row.isCurr
       ? `${ecart >= 0 ? '+' : ''}${fmt(ecart)}`
       : `${ecart >= 0 ? '+' : ''}${ecart.toFixed(2)}`);
-    const pctStr = (!row.noEcart && row.a !== 0)
-      ? `${(ecart / Math.abs(row.a) * 100).toFixed(1)} %` : '—';
+    const pctRaw = (!row.noEcart && row.a !== 0)
+      ? (ecart / Math.abs(row.a) * 100).toFixed(1) : null;
+    const ecartCombined = row.noEcart ? '—'
+      : ecartStr + (pctRaw != null ? `<br><small>${pctRaw} %</small>` : '');
     const cls = row.noEcart ? '' : (row.inv
       ? (ecart > 0 ? 'ct-neg' : ecart < 0 ? 'ct-pos' : '')
       : (ecart > 0 ? 'ct-pos' : ecart < 0 ? 'ct-neg' : ''));
     return `<tr><td>${row.lbl}</td><td>${fmtVal(row.a)}</td><td>${fmtVal(row.b)}</td>
-      <td class="${cls}">${ecartStr}</td><td class="${cls}">${pctStr}</td></tr>`;
+      <td class="${cls}">${ecartCombined}</td></tr>`;
   }).join('');
 
   const durationNote = p.duree !== pm.duree
@@ -693,7 +700,7 @@ function startCompare(id) {
       <div class="compare-table-wrap">
         <table class="compare-table">
           <thead><tr>
-            <th>Indicateur</th><th>Actuel</th><th>${nomB}</th><th>Écart</th><th>Écart %</th>
+            <th>Indicateur</th><th>Actuel</th><th>${nomB}</th><th>Écart</th>
           </tr></thead>
           <tbody>${rows}</tbody>
         </table>
@@ -1029,7 +1036,7 @@ function computeAndRender() {
   /* KPI – Capital final */
   animateKpi('kpi-final', d.final, fmt);
   document.getElementById('kpi-final-sub').textContent =
-    `après ${p.duree} an${p.duree > 1 ? 's' : ''}`;
+    `après ${p.duree} an${p.duree > 1 ? 's' : ''} · ×${d.mult.toFixed(2)} la mise`;
 
   /* KPI – Valeur réelle */
   const erosion = d.final > 0 ? ((1 - d.reel / d.final) * 100).toFixed(0) : 0;
@@ -1053,8 +1060,10 @@ function computeAndRender() {
   /* KPI – Plus-value nette */
   const gainNet = fiscOn ? d.gain * 0.828 : d.gain;
   animateKpi('kpi-net', gainNet, fmt);
+  const gainNetPct = d.versé > 0 ? Math.round(gainNet / d.versé * 100) : 0;
   document.getElementById('kpi-net-sub').textContent =
-    fiscOn ? 'après PS 17.2 % (PEA)' : 'sans fiscalité appliquée';
+    (fiscOn ? 'après PS 17.2 % (PEA)' : 'plus-value brute') +
+    ` · +${gainNetPct} % du versé`;
 
   /* KPI – Frais ETF */
   const fraisPct = (d.final + d.fraisTot) > 0
@@ -1097,6 +1106,11 @@ function computeAndRender() {
 
   /* KPI – Économie vs CTO */
   animateKpi('kpi-economie', fisc.economiePEAvsCTO, fmt);
+  const economiePct = d.gain > 0 ? Math.round(Math.abs(fisc.economiePEAvsCTO) / d.gain * 100) : 0;
+  const economieSubEl = document.getElementById('kpi-economie-sub');
+  if (economieSubEl) economieSubEl.textContent = fisc.economiePEAvsCTO >= 0
+    ? `avantage fiscal PEA · +${economiePct} % du gain`
+    : `désavantage fiscal · ${economiePct} % du gain`;
 
   /* Badges delta */
   setDelta('delta-final',  d.final,    DEF.final);
