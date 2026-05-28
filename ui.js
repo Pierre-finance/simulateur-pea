@@ -16,12 +16,22 @@ let editingPhaseId = null;   // ID de la phase en cours d'édition (mode inline)
 let showYearView  = false;   // bascule tableau année par année
 
 /* ── Clés localStorage ───────────────────────────────────── */
-const LS_PARAMS = 'pea_params';
-const LS_VPS    = 'pea_vps';
-const LS_FISC   = 'pea_fisc';
-const LS_COUPLE = 'pea_couple';
-const LS_AUDE   = 'pea_aude';
-const LS_PHASES = 'pea_phases';
+const LS_PARAMS    = 'pea_params';
+const LS_VPS       = 'pea_vps';
+const LS_FISC      = 'pea_fisc';
+const LS_COUPLE    = 'pea_couple';
+const LS_AUDE      = 'pea_aude';
+const LS_PHASES    = 'pea_phases';
+const LS_SCENARIOS = 'pea_scenarios';
+const MAX_SCENARIOS = 20;
+
+/* ── Tableau enrichi ─────────────────────────────────────── */
+let _tableSort     = { col: null, dir: 'asc' };
+let _tableFilter   = '';
+let _lastTableData = null;
+
+/* ── Scénarios sauvegardés ───────────────────────────────── */
+let _compareScenarioData = null; // { nom, totL, yrs, d } | null
 
 /* ── Animation des KPI ───────────────────────────────────── */
 const _kpiPrev = {};
@@ -400,6 +410,312 @@ function escHtml(s) {
     .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+/* ── Gestion des scénarios sauvegardés ───────────────────── */
+
+function loadScenarios() {
+  try {
+    const arr = JSON.parse(localStorage.getItem(LS_SCENARIOS));
+    return Array.isArray(arr) ? arr : [];
+  } catch (_) { return []; }
+}
+
+function saveScenarios(arr) {
+  try {
+    localStorage.setItem(LS_SCENARIOS, JSON.stringify(arr));
+  } catch (e) {
+    if (e.name === 'QuotaExceededError') {
+      alert('Stockage local plein — supprimez des scénarios anciens pour libérer de l\'espace.');
+    }
+  }
+}
+
+function buildScenarioParams() {
+  return {
+    ...getParams(),
+    vps:    JSON.parse(JSON.stringify(vps)),
+    fisc:   document.getElementById('cb-fisc').checked,
+    couple: document.getElementById('cb-couple').checked,
+    aude: {
+      enabled:     document.getElementById('cb-aude').checked,
+      enveloppe:   document.getElementById('aude-enveloppe').value,
+      tauxAuDela:  +document.getElementById('n-taux-aude').value,
+      fraisAuDela: +document.getElementById('n-frais-aude').value,
+    },
+    phases: JSON.parse(JSON.stringify(phases)),
+  };
+}
+
+function renderScenariosList() {
+  const arr   = loadScenarios();
+  const list  = document.getElementById('scenarios-list');
+  const badge = document.getElementById('scenarios-badge');
+  const hint  = document.getElementById('scenarios-limit-hint');
+  if (!list) return;
+
+  if (badge) {
+    badge.textContent = arr.length ? String(arr.length) : '';
+    badge.classList.toggle('show', arr.length > 0);
+  }
+  if (hint) {
+    hint.textContent = arr.length >= MAX_SCENARIOS
+      ? `Limite atteinte (${MAX_SCENARIOS} max)`
+      : arr.length >= 18
+        ? `${MAX_SCENARIOS - arr.length} emplacements restants`
+        : '';
+  }
+
+  if (!arr.length) {
+    list.innerHTML = '<p class="scenarios-empty">Aucun scénario sauvegardé. Cliquez sur « 💾 Sauvegarder » pour commencer à comparer différentes stratégies.</p>';
+    return;
+  }
+
+  list.innerHTML = arr.map(sc => {
+    const dateStr = new Date(sc.date_modification).toLocaleString('fr-FR', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+    return `
+    <div class="scenario-save-card" data-id="${sc.id}">
+      <div class="sc-card-header">
+        <div class="sc-card-name">${escHtml(sc.nom)}</div>
+        <div class="sc-card-date">Modifié le ${dateStr}</div>
+      </div>
+      <div class="sc-card-kpis">
+        <span class="sc-kpi"><span class="sc-kpi-lbl">Versement</span>${sc.parametres.mensuel} €/mois</span>
+        <span class="sc-kpi"><span class="sc-kpi-lbl">Durée</span>${sc.parametres.duree} ans</span>
+        <span class="sc-kpi"><span class="sc-kpi-lbl">Capital final</span>${fmt(sc.resultats_kpi.final)}</span>
+      </div>
+      <div class="sc-card-actions">
+        <button class="sc-btn" data-action="load">📂 Charger</button>
+        <button class="sc-btn" data-action="rename">✏️ Renommer</button>
+        <button class="sc-btn sc-btn-compare" data-action="compare">📋 Comparer</button>
+        <button class="sc-btn sc-btn-del" data-action="del">🗑️ Supprimer</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function openSaveModal() {
+  const arr = loadScenarios();
+  if (arr.length >= MAX_SCENARIOS) {
+    alert(`Limite de ${MAX_SCENARIOS} scénarios atteinte. Supprimez-en un pour continuer.`);
+    return;
+  }
+  const now  = new Date();
+  const name = `Scénario du ${now.toLocaleDateString('fr-FR')} ${String(now.getHours()).padStart(2, '0')}h${String(now.getMinutes()).padStart(2, '0')}`;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'modal-save-scenario';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">💾 Sauvegarder le scénario</div>
+      <label class="modal-lbl" for="modal-scenario-name">Nom du scénario</label>
+      <input class="modal-input" type="text" id="modal-scenario-name" maxlength="50" placeholder="Nom…" value="${escHtml(name)}">
+      <div class="modal-footer">
+        <button class="modal-btn-primary" id="modal-save-confirm">Enregistrer</button>
+        <button class="modal-btn-cancel"  id="modal-save-cancel">Annuler</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const input = modal.querySelector('#modal-scenario-name');
+  setTimeout(() => { input.focus(); input.select(); }, 50);
+
+  modal.querySelector('#modal-save-confirm').addEventListener('click', () => {
+    const nom = input.value.trim();
+    if (!nom) { input.classList.add('modal-input-error'); return; }
+    const arr2 = loadScenarios();
+    if (arr2.length >= MAX_SCENARIOS) { alert(`Limite de ${MAX_SCENARIOS} scénarios atteinte.`); return; }
+    const p2  = getParams();
+    const d2  = compute(p2, vps, { plafond: getPlafond(), ...getAuDelaOpts() }, phases);
+    const now2 = new Date().toISOString();
+    arr2.push({
+      id:                Date.now(),
+      nom:               nom.slice(0, 50),
+      date_creation:     now2,
+      date_modification: now2,
+      parametres:        buildScenarioParams(),
+      resultats_kpi: {
+        final:    d2.final,
+        verse:    d2.versé,
+        gain:     d2.gain,
+        reel:     d2.reel,
+        mult:     d2.mult,
+        fraisTot: d2.fraisTot,
+      },
+    });
+    saveScenarios(arr2);
+    document.body.removeChild(modal);
+    renderScenariosList();
+    document.getElementById('coll-scenarios').classList.add('open');
+  });
+
+  const closeModal = () => { if (document.body.contains(modal)) document.body.removeChild(modal); };
+  modal.querySelector('#modal-save-cancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+}
+
+function openRenameModal(id) {
+  const sc = loadScenarios().find(s => s.id === id);
+  if (!sc) return;
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-title">✏️ Renommer le scénario</div>
+      <label class="modal-lbl" for="modal-rename-input">Nouveau nom</label>
+      <input class="modal-input" type="text" id="modal-rename-input" maxlength="50" value="${escHtml(sc.nom)}">
+      <div class="modal-footer">
+        <button class="modal-btn-primary" id="modal-rename-confirm">Renommer</button>
+        <button class="modal-btn-cancel"  id="modal-rename-cancel">Annuler</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+  const input = modal.querySelector('#modal-rename-input');
+  setTimeout(() => { input.focus(); input.select(); }, 50);
+
+  modal.querySelector('#modal-rename-confirm').addEventListener('click', () => {
+    const nom = input.value.trim();
+    if (!nom) { input.classList.add('modal-input-error'); return; }
+    const arr2 = loadScenarios();
+    const s    = arr2.find(x => x.id === id);
+    if (s) { s.nom = nom.slice(0, 50); s.date_modification = new Date().toISOString(); }
+    saveScenarios(arr2);
+    document.body.removeChild(modal);
+    renderScenariosList();
+  });
+
+  const closeModal = () => { if (document.body.contains(modal)) document.body.removeChild(modal); };
+  modal.querySelector('#modal-rename-cancel').addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  modal.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+}
+
+function deleteScenario(id) {
+  if (!confirm('Supprimer ce scénario définitivement ?')) return;
+  saveScenarios(loadScenarios().filter(s => s.id !== id));
+  renderScenariosList();
+}
+
+function loadScenario(id) {
+  const sc = loadScenarios().find(s => s.id === id);
+  if (!sc) return;
+
+  const currentParams = JSON.stringify(getParams());
+  const savedParams   = localStorage.getItem(LS_PARAMS);
+  if (savedParams && currentParams !== savedParams) {
+    if (!confirm('Charger ce scénario remplacera vos paramètres actuels. Continuer ?')) return;
+  }
+
+  const pm = sc.parametres;
+  applyParams(pm);
+
+  vps   = Array.isArray(pm.vps) ? JSON.parse(JSON.stringify(pm.vps)) : [];
+  vpId  = vps.reduce((m, x) => Math.max(m, x.id || 0), 0);
+  renderVP();
+
+  phases         = Array.isArray(pm.phases) ? JSON.parse(JSON.stringify(pm.phases)) : [];
+  phaseId        = phases.reduce((m, x) => Math.max(m, x.id || 0), 0);
+  editingPhaseId = null;
+  renderPhases();
+
+  if (pm.fisc   != null) document.getElementById('cb-fisc').checked   = !!pm.fisc;
+  if (pm.couple != null) document.getElementById('cb-couple').checked = !!pm.couple;
+  if (pm.aude) {
+    document.getElementById('cb-aude').checked = !!pm.aude.enabled;
+    if (pm.aude.enveloppe)     document.getElementById('aude-enveloppe').value  = pm.aude.enveloppe;
+    if (pm.aude.tauxAuDela  != null) document.getElementById('n-taux-aude').value  = pm.aude.tauxAuDela;
+    if (pm.aude.fraisAuDela != null) document.getElementById('n-frais-aude').value = pm.aude.fraisAuDela;
+    document.getElementById('aude-params').className =
+      pm.aude.enabled ? 'aude-params-visible' : 'aude-params-hidden';
+  }
+  computeAndRender();
+}
+
+function startCompare(id) {
+  const sc = loadScenarios().find(s => s.id === id);
+  if (!sc) return;
+
+  const pm   = sc.parametres;
+  const opts = {
+    plafond: pm.couple ? PLAFONDS.couple : PLAFONDS.pea,
+    ...(pm.aude && pm.aude.enabled
+      ? { enveloppe: pm.aude.enveloppe, tauxAuDela: pm.aude.tauxAuDela, fraisAuDela: pm.aude.fraisAuDela }
+      : { enveloppe: null }),
+  };
+  const dB = compute(pm, Array.isArray(pm.vps) ? pm.vps : [], opts, Array.isArray(pm.phases) ? pm.phases : []);
+  if (!dB.totL.length) return;
+
+  const p  = getParams();
+  const dA = compute(p, vps, { plafond: getPlafond(), ...getAuDelaOpts() }, phases);
+
+  _compareScenarioData = { nom: sc.nom, totL: dB.totL, yrs: dB.yrs, d: dB };
+  addComparisonLine(dB.totL, dB.yrs, sc.nom);
+
+  const nomB = escHtml(sc.nom);
+  const kpiRows = [
+    { lbl: 'Capital final',     a: dA.final,     b: dB.final,     isCurr: true  },
+    { lbl: 'Plus-value brute',  a: dA.gain,      b: dB.gain,      isCurr: true  },
+    { lbl: 'Valeur réelle',     a: dA.reel,      b: dB.reel,      isCurr: true  },
+    { lbl: 'Multiplicateur',    a: dA.mult,      b: dB.mult,      isCurr: false, fmtFn: v => `× ${v.toFixed(2)}` },
+    { lbl: 'Frais ETF cumulés', a: dA.fraisTot,  b: dB.fraisTot,  isCurr: true, inv: true },
+    { lbl: 'Durée',             a: p.duree,      b: pm.duree,     isCurr: false, fmtFn: v => `${v} ans`,      noEcart: true },
+    { lbl: 'Versement mensuel', a: p.mensuel,    b: pm.mensuel,   isCurr: false, fmtFn: v => `${v} €/mois`,   noEcart: true },
+    { lbl: 'Rendement moyen',   a: dA.tauxMoyen, b: dB.tauxMoyen, isCurr: false, fmtFn: v => `${v.toFixed(1)} %`, noEcart: true },
+  ];
+
+  const rows = kpiRows.map(row => {
+    const fmtVal = row.fmtFn || (v => fmt(v));
+    const ecart  = row.b - row.a;
+    const ecartStr = row.noEcart ? '—' : (row.isCurr
+      ? `${ecart >= 0 ? '+' : ''}${fmt(ecart)}`
+      : `${ecart >= 0 ? '+' : ''}${ecart.toFixed(2)}`);
+    const pctStr = (!row.noEcart && row.a !== 0)
+      ? `${(ecart / Math.abs(row.a) * 100).toFixed(1)} %` : '—';
+    const cls = row.noEcart ? '' : (row.inv
+      ? (ecart > 0 ? 'ct-neg' : ecart < 0 ? 'ct-pos' : '')
+      : (ecart > 0 ? 'ct-pos' : ecart < 0 ? 'ct-neg' : ''));
+    return `<tr><td>${row.lbl}</td><td>${fmtVal(row.a)}</td><td>${fmtVal(row.b)}</td>
+      <td class="${cls}">${ecartStr}</td><td class="${cls}">${pctStr}</td></tr>`;
+  }).join('');
+
+  const durationNote = p.duree !== pm.duree
+    ? `<p class="compare-duration-note">⚠ Durées différentes : actuel ${p.duree} ans / comparé ${pm.duree} ans.</p>`
+    : '';
+
+  const modal = document.createElement('div');
+  modal.className = 'modal-overlay';
+  modal.id = 'modal-compare';
+  modal.innerHTML = `
+    <div class="modal-box modal-box-wide">
+      <div class="modal-title">📊 Scénario actuel vs <em>${nomB}</em></div>
+      ${durationNote}
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead><tr>
+            <th>Indicateur</th><th>Actuel</th><th>${nomB}</th><th>Écart</th><th>Écart %</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <button class="modal-btn-cancel" id="modal-compare-close">✕ Fermer la comparaison</button>
+      </div>
+    </div>`;
+  document.body.appendChild(modal);
+
+  modal.querySelector('#modal-compare-close').addEventListener('click', stopCompare);
+  modal.addEventListener('click', e => { if (e.target === modal) stopCompare(); });
+  modal.addEventListener('keydown', e => { if (e.key === 'Escape') stopCompare(); });
+}
+
+function stopCompare() {
+  _compareScenarioData = null;
+  removeComparisonLine();
+  const modal = document.getElementById('modal-compare');
+  if (modal) document.body.removeChild(modal);
+}
+
 /* ── Validation des phases (chevauchements) ──────────────── */
 function validatePhases(duree) {
   const warns  = [];
@@ -527,6 +843,129 @@ function renderYearTable(p) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+
+/* ── Tableau année par année enrichi ─────────────────────── */
+function renderTable(d, phases, vps) {
+  const tbody    = document.getElementById('tbody');
+  const tfoot    = document.getElementById('tfoot');
+  const p        = getParams();
+  const showAude = (d.capAuDelaFinal || 0) > 0;
+
+  // Construire les lignes de données
+  const rows = d.yrs.map((an, i) => {
+    const versAn  = i === 0 ? d.versL[0] : Math.max(0, d.versL[i] - d.versL[i - 1]);
+    const phIdx   = d.phaseIdxL[i];
+    const phase   = phIdx >= 0 ? phases[phIdx] : null;
+    const phaseLabel = phase ? (phase.label || `Phase ${phIdx + 1}`) : null;
+    const phaseColor = phase ? PHASE_PALETTE[phIdx % PHASE_PALETTE.length].bar : null;
+    const rendAn  = phase ? phase.taux : p.taux;
+    const cagr    = (i > 0 && d.totL[0] > 0)
+      ? (Math.pow(d.totL[i] / d.totL[0], 1 / an) - 1) * 100
+      : null;
+    const hasVP   = vps.some(v => v.recurrent ? an >= (v.annee || 1) : an === v.annee);
+    const isPlafondYear = d.plafondAn != null && d.plafondAn === an;
+
+    return { an, i, versL: d.versL[i], versAn, gainL: d.gainL[i], totL: d.totL[i],
+             reelL: d.reelL[i], fraisL: d.fraisL[i], capAuDelaL: d.capAuDelaL[i] || 0,
+             rendAn, phaseLabel, phaseColor, phIdx, cagr, hasVP, isPlafondYear };
+  });
+
+  // Appliquer le filtre
+  const filterLow = _tableFilter.toLowerCase();
+  const filtered  = filterLow
+    ? rows.filter(r =>
+        String(r.an).includes(filterLow) ||
+        (r.phaseLabel && r.phaseLabel.toLowerCase().includes(filterLow))
+      )
+    : rows;
+
+  // Appliquer le tri (stable via tie-breaker sur r.an)
+  const colMap = {
+    'an':      r => r.an,
+    'vers':    r => r.versL,
+    'vers-an': r => r.versAn,
+    'gain':    r => r.gainL,
+    'tot':     r => r.totL,
+    'reel':    r => r.reelL,
+    'frais':   r => r.fraisL,
+    'rend-an': r => r.rendAn,
+    'phase':   r => r.phaseLabel || '',
+    'cagr':    r => r.cagr ?? -Infinity,
+  };
+  if (_tableSort.col && colMap[_tableSort.col]) {
+    const fn = colMap[_tableSort.col];
+    filtered.sort((a, b) => {
+      const va = fn(a), vb = fn(b);
+      let cmp  = typeof va === 'string' ? va.localeCompare(vb, 'fr') : va - vb;
+      if (cmp === 0) cmp = a.an - b.an;
+      return _tableSort.dir === 'asc' ? cmp : -cmp;
+    });
+  }
+
+  // Rendre le tbody
+  tbody.innerHTML = '';
+  filtered.forEach((r, sortedIdx) => {
+    // Début de phase : premier item de cette phase dans la vue courante
+    const isPhaseStart = r.phaseLabel !== null && (
+      sortedIdx === 0 || filtered[sortedIdx - 1].phaseLabel !== r.phaseLabel
+    );
+
+    const phaseChip = r.phaseLabel
+      ? `<span class="td-phase-chip" style="background:${r.phaseColor}20;color:${r.phaseColor}">${escHtml(r.phaseLabel)}</span>`
+      : `<span class="td-phase-chip td-phase-global">—</span>`;
+
+    const cagrCell = r.cagr != null
+      ? `<span class="${r.cagr >= 0 ? 'td-cagr-pos' : 'td-cagr-neg'}">${r.cagr.toFixed(1)} %</span>`
+      : '—';
+
+    const yearCls  = r.isPlafondYear ? 'td-year td-plafond-year' : 'td-year';
+    const versAnStr = r.hasVP
+      ? `${fmt(r.versAn)}<span class="td-vp-marker" title="Versement ponctuel ce mois">💰</span>`
+      : fmt(r.versAn);
+    const rendSign = r.rendAn >= 0 ? '+' : '';
+
+    const tr = document.createElement('tr');
+    if (isPhaseStart && r.phaseColor) tr.style.borderLeft = `3px solid ${r.phaseColor}`;
+    tr.innerHTML = `
+      <td class="${yearCls}">Année ${r.an}</td>
+      <td>${fmt(r.versL)}</td>
+      <td>${versAnStr}</td>
+      <td class="td-gain">${fmt(r.gainL)}</td>
+      <td class="td-total">${fmt(r.totL)}</td>
+      <td class="td-reel">${fmt(r.reelL)}</td>
+      <td class="td-frais">${fmt(r.fraisL)}</td>
+      <td>${rendSign}${r.rendAn.toFixed(1)} %</td>
+      <td>${phaseChip}</td>
+      <td>${cagrCell}</td>
+      <td style="display:${showAude ? '' : 'none'}">${r.capAuDelaL > 0 ? fmt(r.capAuDelaL) : '—'}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  // Rendre le tfoot (totaux sur la simulation complète, indépendamment du filtre)
+  if (tfoot) {
+    const lastIdx    = d.yrs.length - 1;
+    const finalReel  = d.reelL[lastIdx] || 0;
+    const cagrGlobal = (lastIdx > 0 && d.totL[0] > 0)
+      ? (Math.pow(d.final / d.totL[0], 1 / d.yrs[lastIdx]) - 1) * 100
+      : null;
+    const cagrGlobalStr = cagrGlobal != null
+      ? `<span class="${cagrGlobal >= 0 ? 'td-cagr-pos' : 'td-cagr-neg'}">${cagrGlobal.toFixed(1)} %</span>`
+      : '—';
+    tfoot.innerHTML = `<tr>
+      <td>Total</td>
+      <td class="td-total">${fmt(d.versé)}</td>
+      <td>—</td>
+      <td class="td-gain">${fmt(d.gain)}</td>
+      <td class="td-total">${fmt(d.final)}</td>
+      <td class="td-reel">${fmt(finalReel)}</td>
+      <td class="td-frais">${fmt(d.fraisTot)}</td>
+      <td>—</td>
+      <td>—</td>
+      <td>${cagrGlobalStr}</td>
+      <td style="display:${showAude ? '' : 'none'}">—</td>
+    </tr>`;
+  }
 }
 
 /* ── Application d'un scénario pédagogique ───────────────── */
@@ -680,7 +1119,7 @@ function computeAndRender() {
   /* Mise à jour du max des années VP */
   document.querySelectorAll('.vp-yr').forEach(el => { el.max = p.duree; });
 
-  /* Colonne tableau complément */
+  /* Colonne tableau complément (header) */
   const thAude = document.getElementById('th-aude');
   if (thAude) thAude.style.display = (d.capAuDelaFinal || 0) > 0 ? '' : 'none';
 
@@ -719,22 +1158,9 @@ function computeAndRender() {
   /* Phases — tableau année par année */
   renderYearTable(p);
 
-  /* Tableau */
-  const tbody = document.getElementById('tbody');
-  tbody.innerHTML = '';
-  d.yrs.forEach((an, i) => {
-    const hasAude = (d.capAuDelaL[i] || 0) > 0;
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td class="td-year">Année ${an}</td>
-      <td>${fmt(d.versL[i])}</td>
-      <td class="td-gain">${fmt(d.gainL[i])}</td>
-      <td class="td-total">${fmt(d.totL[i])}</td>
-      <td class="td-reel">${fmt(d.reelL[i])}</td>
-      <td class="td-frais">${fmt(d.fraisL[i])}</td>
-      <td class="td-total" style="display:${(d.capAuDelaFinal || 0) > 0 ? '' : 'none'}">${hasAude ? fmt(d.capAuDelaL[i]) : '—'}</td>`;
-    tbody.appendChild(tr);
-  });
+  /* Tableau enrichi */
+  _lastTableData = { d, phases: [...phases], vps: [...vps] };
+  renderTable(d, phases, vps);
 
   /* Sauvegarde automatique */
   saveParams();
@@ -955,10 +1381,55 @@ function init() {
     document.getElementById('scenario-menu').classList.remove('open'),
   );
 
+  /* ── Tableau : tri par colonne ───────────────────────────── */
+  const tblThead = document.querySelector('table thead');
+  if (tblThead) {
+    tblThead.addEventListener('click', e => {
+      const th = e.target.closest('th[data-col]');
+      if (!th) return;
+      const col = th.dataset.col;
+      _tableSort.dir = (_tableSort.col === col && _tableSort.dir === 'asc') ? 'desc' : 'asc';
+      _tableSort.col = col;
+      document.querySelectorAll('thead .th-sort-icon').forEach(ic => { ic.textContent = ''; });
+      const icon = th.querySelector('.th-sort-icon');
+      if (icon) icon.textContent = _tableSort.dir === 'asc' ? ' ▲' : ' ▼';
+      if (_lastTableData) renderTable(_lastTableData.d, _lastTableData.phases, _lastTableData.vps);
+    });
+  }
+
+  /* ── Tableau : filtre ────────────────────────────────────── */
+  const filterInput = document.getElementById('table-filter');
+  if (filterInput) {
+    filterInput.addEventListener('input', e => {
+      _tableFilter = e.target.value.trim();
+      if (_lastTableData) renderTable(_lastTableData.d, _lastTableData.phases, _lastTableData.vps);
+    });
+  }
+
+  /* ── Scénarios sauvegardés ───────────────────────────────── */
+  const btnSave = document.getElementById('btn-save-scenario');
+  if (btnSave) btnSave.addEventListener('click', openSaveModal);
+
+  const scenariosList = document.getElementById('scenarios-list');
+  if (scenariosList) {
+    scenariosList.addEventListener('click', e => {
+      const card   = e.target.closest('.scenario-save-card');
+      if (!card) return;
+      const id     = +card.dataset.id;
+      const action = e.target.closest('[data-action]')?.dataset.action;
+      if (!action) return;
+      if (action === 'load')    loadScenario(id);
+      if (action === 'rename')  openRenameModal(id);
+      if (action === 'compare') startCompare(id);
+      if (action === 'del')     deleteScenario(id);
+    });
+  }
+
   initTooltips();
   loadParams();
   renderVP();
   renderPhases();
+  renderScenariosList();
   computeAndRender();
 }
 

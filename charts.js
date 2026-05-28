@@ -12,9 +12,43 @@ const TT = {
   padding: 12,
 };
 
-let _curFinal = 0;
-let chartGrowth = null;
-let chartDonut  = null;
+let _curFinal       = 0;
+let chartGrowth     = null;
+let chartDonut      = null;
+let _comparisonData = null; // { totL, yrs, nom } | null
+
+/* ── Comparaison de scénarios ─────────────────────────────── */
+function addComparisonLine(totL, yrs, nom) {
+  _comparisonData = { totL, yrs, nom };
+  const ds = chartGrowth.data.datasets;
+  if (ds.length < 6) {
+    ds.push({
+      label: `Comparaison : ${nom}`,
+      data: totL,
+      borderColor: '#e3732b',
+      backgroundColor: 'transparent',
+      fill: false, tension: .35, borderWidth: 2,
+      borderDash: [8, 4],
+      pointRadius: 0, pointHoverRadius: 4,
+      hidden: false,
+    });
+  } else {
+    ds[5].label  = `Comparaison : ${nom}`;
+    ds[5].data   = totL;
+    ds[5].hidden = false;
+  }
+  chartGrowth.update();
+}
+
+function removeComparisonLine() {
+  _comparisonData = null;
+  const ds = chartGrowth.data.datasets;
+  if (ds.length > 5) {
+    ds[5].data   = [];
+    ds[5].hidden = true;
+  }
+  chartGrowth.update();
+}
 
 function initCharts() {
   Chart.defaults.color       = '#8b949e';
@@ -238,6 +272,12 @@ function updateCharts(data, dataBase = null, phases = []) {
 
   // Zones de phase (transmises au plugin phase-zones via propriété du chart)
   chartGrowth._phases = phases;
+
+  // Maintenir la ligne de comparaison si une comparaison est active (avant update)
+  if (_comparisonData && chartGrowth.data.datasets.length > 5) {
+    chartGrowth.data.datasets[5].data   = _comparisonData.totL;
+    chartGrowth.data.datasets[5].hidden = false;
+  }
 
   chartGrowth.update();
 
