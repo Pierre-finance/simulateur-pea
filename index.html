@@ -9,14 +9,22 @@
 <body>
 <div class="container">
 
-  <!-- Navigation écosystème -->
-  <nav class="app-switch">
+  <!-- Navigation écosystème — masquée quand le simulateur est publié seul
+       (GitHub Pages) : les autres briques n'existent que dans l'écosystème local -->
+  <nav class="app-switch" id="nav-ecosysteme">
     <a href="../index.html">🏠 Accueil</a>
     <span class="current">📈 Simulateur</span>
     <a href="../tracker/index.html">📊 Tracker</a>
     <a href="../actualites/index.html">📰 Actualités</a>
     <a href="../entreprises/index.html">🏢 Entreprises</a>
   </nav>
+  <script>
+    /* Publié seul (GitHub Pages) : sans hub ni tracker, on masque la
+       navigation et le bouton « Partir de mon PEA réel » plus bas. */
+    var PUBLIE_SEUL = location.hostname.endsWith('github.io');
+    if (PUBLIE_SEUL)
+      document.getElementById('nav-ecosysteme').style.display = 'none';
+  </script>
 
   <!-- Header -->
   <header>
@@ -34,6 +42,9 @@
     <button class="preset-btn" id="btn-pea-reel"
             title="Reprend la valeur actuelle et le rythme de versement de ton tracker (même navigateur)">
       📊 Partir de mon PEA réel</button>
+    <script>
+      if (PUBLIE_SEUL) document.getElementById('btn-pea-reel').style.display = 'none';
+    </script>
     <span class="presets-sep"></span>
     <div class="scenario-wrap" id="scenario-wrap">
       <button class="scenario-btn" id="btn-scenario">Scénarios ▾</button>
