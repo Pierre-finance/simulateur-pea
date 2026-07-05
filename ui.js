@@ -15,6 +15,10 @@ let phaseId       = 0;
 let editingPhaseId = null;   // ID de la phase en cours d'édition (mode inline)
 let showYearView  = false;   // bascule tableau année par année
 
+// Personnalisation fine : { [annee]: { mensuel?, taux?, mois?: { [1..12]: { versement?, taux? } } } }
+let overrides     = {};
+let expandedYears = new Set(); // années dont la grille mensuelle est dépliée
+
 /* ── Clés localStorage ───────────────────────────────────── */
 const LS_PARAMS    = 'pea_params';
 const LS_VPS       = 'pea_vps';
@@ -22,7 +26,9 @@ const LS_FISC      = 'pea_fisc';
 const LS_COUPLE    = 'pea_couple';
 const LS_AUDE      = 'pea_aude';
 const LS_PHASES    = 'pea_phases';
+const LS_OVERRIDES = 'pea_overrides';
 const LS_SCENARIOS = 'pea_scenarios';
+const LS_RENTE     = 'pea_rente';
 const MAX_SCENARIOS = 20;
 
 /* ── Tableau enrichi ─────────────────────────────────────── */
@@ -45,14 +51,16 @@ function animateKpi(id, toVal, fmtFn) {
   _kpiPrev[id]  = toVal;
   if (Math.abs(toVal - fromVal) < 0.5) { el.textContent = fmtFn(toVal); return; }
   const DUR = 300;
-  const t0  = performance.now();
-  (function tick(now) {
-    const progress = Math.min((now - t0) / DUR, 1);
+  let t0 = null; // origine prise sur le 1er timestamp rAF (même base de temps que les suivants)
+  const tick = now => {
+    if (t0 === null) t0 = now;
+    const progress = Math.min(Math.max((now - t0) / DUR, 0), 1);
     const ease     = 1 - Math.pow(1 - progress, 3);
     el.textContent = fmtFn(fromVal + (toVal - fromVal) * ease);
     if (progress < 1) { _kpiRaf[id] = requestAnimationFrame(tick); }
     else { el.textContent = fmtFn(toVal); delete _kpiRaf[id]; }
-  })(t0);
+  };
+  _kpiRaf[id] = requestAnimationFrame(tick);
 }
 
 /* ── Debounce ────────────────────────────────────────────── */
@@ -120,6 +128,15 @@ function getAuDelaOpts() {
   };
 }
 
+function getRenteOpts() {
+  return {
+    enabled:    document.getElementById('cb-rente').checked,
+    renteNette: +document.getElementById('n-rente').value,
+    taux:       +document.getElementById('n-taux-rente').value,
+    indexer:    document.getElementById('cb-rente-index').checked,
+  };
+}
+
 /* ── Mise à jour immédiate des ctrl-values ───────────────── */
 function updateCtrlValues() {
   const p = getParams();
@@ -130,6 +147,16 @@ function updateCtrlValues() {
   document.getElementById('cv-inflation').textContent = p.inflation + ' %';
   document.getElementById('cv-frais').textContent     = p.frais + ' %';
   document.getElementById('cv-aug').textContent       = p.aug + ' %';
+
+  // Rendement net : frais déduits, puis inflation déduite (approche multiplicative)
+  const netHint = document.getElementById('taux-net-hint');
+  if (netHint) {
+    const netFrais = (1 + p.taux / 100) * (1 - p.frais / 100) - 1;
+    const netReel  = (1 + netFrais) / (1 + p.inflation / 100) - 1;
+    netHint.innerHTML =
+      `net de frais : <strong>${(netFrais * 100).toFixed(2)} %</strong>` +
+      ` · net d'inflation : <strong>${(netReel * 100).toFixed(2)} %</strong>`;
+  }
 }
 
 /* ── localStorage ────────────────────────────────────────── */
@@ -165,7 +192,19 @@ function saveParams() {
       fraisAuDela: +document.getElementById('n-frais-aude').value,
     }));
     localStorage.setItem(LS_PHASES, JSON.stringify(phases));
+    localStorage.setItem(LS_OVERRIDES, JSON.stringify(overrides));
+    localStorage.setItem(LS_RENTE, JSON.stringify(getRenteOpts()));
   } catch (_) {}
+}
+
+function applyRenteOpts(r) {
+  if (!r || typeof r !== 'object') return;
+  document.getElementById('cb-rente').checked = !!r.enabled;
+  if (r.renteNette != null) document.getElementById('n-rente').value      = r.renteNette;
+  if (r.taux       != null) document.getElementById('n-taux-rente').value = r.taux;
+  if (r.indexer    != null) document.getElementById('cb-rente-index').checked = !!r.indexer;
+  document.getElementById('rente-params').className =
+    r.enabled ? 'aude-params-visible' : 'aude-params-hidden';
 }
 
 function loadParams() {
@@ -202,6 +241,11 @@ function loadParams() {
       phaseId = ph.reduce((m, x) => Math.max(m, x.id || 0), 0);
       renderPhases();
     }
+
+    const ov = JSON.parse(localStorage.getItem(LS_OVERRIDES));
+    if (ov && typeof ov === 'object' && !Array.isArray(ov)) overrides = ov;
+
+    applyRenteOpts(JSON.parse(localStorage.getItem(LS_RENTE)));
   } catch (_) {}
 }
 
@@ -247,7 +291,7 @@ function renderVP() {
       </div>
       <div class="vp-field" style="flex:1;min-width:110px">
         <label>Libellé</label>
-        <input class="vp-input vp-input-lbl vp-lbl" type="text" placeholder="Prime, bonus, héritage…" value="${v.libelle}" style="width:100%">
+        <input class="vp-input vp-input-lbl vp-lbl" type="text" placeholder="Prime, bonus, héritage…" value="${escHtml(v.libelle)}" style="width:100%">
       </div>
       <div class="vp-check-col">
         <label>Récurrent</label>
@@ -408,6 +452,79 @@ function renderAuDela(d) {
     </div>`;
 }
 
+/* ── Phase de rente ──────────────────────────────────────── */
+function renderRente(d, p) {
+  const o      = getRenteOpts();
+  const badge  = document.getElementById('rente-badge');
+  const resDiv = document.getElementById('rente-results');
+  document.getElementById('rente-params').className =
+    o.enabled ? 'aude-params-visible' : 'aude-params-hidden';
+
+  if (!o.enabled || d.final <= 0 || o.renteNette <= 0) {
+    badge.textContent = ''; badge.classList.remove('show');
+    resDiv.innerHTML = '';
+    updateRenteChart(null);
+    return;
+  }
+
+  const base = {
+    capital:    d.final,
+    versements: d.versNets,
+    taux:       o.taux,
+    frais:      p.frais,
+    inflation:  p.inflation,
+    indexer:    o.indexer,
+    dureeMax:   50,
+  };
+  const r        = computeRente({ ...base, renteNette: o.renteNette });
+  const renteMax = renteMaxPourDuree(base, 50);
+
+  /* Durée de vie du capital */
+  let dureeTxt, dureeSub, epuise = r.moisEpuisement !== null;
+  if (epuise) {
+    const ans  = Math.floor(r.moisEpuisement / 12);
+    const mois = r.moisEpuisement % 12;
+    dureeTxt = ans > 0 ? `${ans} an${ans > 1 ? 's' : ''}${mois ? ` ${mois} mois` : ''}` : `${mois} mois`;
+    dureeSub = 'avant épuisement du capital';
+  } else {
+    dureeTxt = '50 ans et +';
+    dureeSub = `capital restant : ${fmt(r.capFinal)}`;
+  }
+
+  badge.textContent = epuise ? dureeTxt : '∞';
+  badge.classList.add('show');
+
+  const renteFinaleTxt = o.indexer && !epuise
+    ? ` · rente indexée : ${fmt(r.renteFinale)}/mois en an 50`
+    : '';
+
+  resDiv.innerHTML = `
+    <div class="kpi-grid" style="margin-top:1.1rem">
+      <div class="kpi ${epuise ? 'gold' : 'green'}">
+        <div class="kpi-label">Durée du capital</div>
+        <div class="kpi-value">${dureeTxt}</div>
+        <div class="kpi-sub">${dureeSub}</div>
+      </div>
+      <div class="kpi green">
+        <div class="kpi-label">Rente soutenable 50 ans</div>
+        <div class="kpi-value">${fmt(renteMax)}</div>
+        <div class="kpi-sub">nets / mois sans épuiser le capital</div>
+      </div>
+      <div class="kpi blue">
+        <div class="kpi-label">Total retiré (net)</div>
+        <div class="kpi-value">${fmt(r.retraitNetTotal)}</div>
+        <div class="kpi-sub">sur la période simulée${renteFinaleTxt}</div>
+      </div>
+      <div class="kpi purple">
+        <div class="kpi-label">Prélèvements sociaux</div>
+        <div class="kpi-value">${fmt(r.psTotal)}</div>
+        <div class="kpi-sub">17.2 % sur la part de plus-value</div>
+      </div>
+    </div>`;
+
+  updateRenteChart(r);
+}
+
 /* ── Utilitaire XSS ──────────────────────────────────────── */
 function escHtml(s) {
   return String(s)
@@ -447,6 +564,8 @@ function buildScenarioParams() {
       fraisAuDela: +document.getElementById('n-frais-aude').value,
     },
     phases: JSON.parse(JSON.stringify(phases)),
+    overrides: JSON.parse(JSON.stringify(overrides)),
+    rente: getRenteOpts(),
   };
 }
 
@@ -531,7 +650,7 @@ function openSaveModal() {
     const arr2 = loadScenarios();
     if (arr2.length >= MAX_SCENARIOS) { alert(`Limite de ${MAX_SCENARIOS} scénarios atteinte.`); return; }
     const p2  = getParams();
-    const d2  = compute(p2, vps, { plafond: getPlafond(), ...getAuDelaOpts() }, phases);
+    const d2  = compute(p2, vps, { plafond: getPlafond(), ...getAuDelaOpts() }, phases, overrides);
     const now2 = new Date().toISOString();
     arr2.push({
       id:                Date.now(),
@@ -624,6 +743,10 @@ function loadScenario(id) {
   editingPhaseId = null;
   renderPhases();
 
+  overrides = (pm.overrides && typeof pm.overrides === 'object' && !Array.isArray(pm.overrides))
+    ? JSON.parse(JSON.stringify(pm.overrides)) : {};
+  expandedYears.clear();
+
   if (pm.fisc   != null) document.getElementById('cb-fisc').checked   = !!pm.fisc;
   if (pm.couple != null) document.getElementById('cb-couple').checked = !!pm.couple;
   if (pm.aude) {
@@ -634,6 +757,7 @@ function loadScenario(id) {
     document.getElementById('aude-params').className =
       pm.aude.enabled ? 'aude-params-visible' : 'aude-params-hidden';
   }
+  if (pm.rente) applyRenteOpts(pm.rente);
   computeAndRender();
 }
 
@@ -648,11 +772,13 @@ function startCompare(id) {
       ? { enveloppe: pm.aude.enveloppe, tauxAuDela: pm.aude.tauxAuDela, fraisAuDela: pm.aude.fraisAuDela }
       : { enveloppe: null }),
   };
-  const dB = compute(pm, Array.isArray(pm.vps) ? pm.vps : [], opts, Array.isArray(pm.phases) ? pm.phases : []);
+  const dB = compute(pm, Array.isArray(pm.vps) ? pm.vps : [], opts,
+    Array.isArray(pm.phases) ? pm.phases : [],
+    (pm.overrides && typeof pm.overrides === 'object') ? pm.overrides : {});
   if (!dB.totL.length) return;
 
   const p  = getParams();
-  const dA = compute(p, vps, { plafond: getPlafond(), ...getAuDelaOpts() }, phases);
+  const dA = compute(p, vps, { plafond: getPlafond(), ...getAuDelaOpts() }, phases, overrides);
 
   _compareScenarioData = { nom: sc.nom, totL: dB.totL, yrs: dB.yrs, d: dB };
   addComparisonLine(dB.totL, dB.yrs, sc.nom);
@@ -834,12 +960,18 @@ function renderYearTable(p) {
     const an    = i + 1;
     const phIdx = phases.findIndex(ph => an >= ph.anneeDebut && an <= ph.anneeFin);
     const ph    = phIdx >= 0 ? phases[phIdx] : null;
-    const mens  = ph ? ph.mensuel : Math.round(p.mensuel * Math.pow(1 + augR, an - 1));
-    const taux  = ph ? ph.taux    : p.taux;
+    const ov    = overrides[an] || null;
+    let mens  = ph ? ph.mensuel : Math.round(p.mensuel * Math.pow(1 + augR, an - 1));
+    let taux  = ph ? ph.taux    : p.taux;
+    if (ov && ov.mensuel != null) mens = ov.mensuel;
+    if (ov && ov.taux    != null) taux = ov.taux;
+    const isCustom = ov && (ov.mensuel != null || ov.taux != null || ov.mois);
     const color = ph ? PHASE_PALETTE[phIdx % PHASE_PALETTE.length].bar : null;
-    const chip  = ph
-      ? `<span class="yt-phase-chip" style="background:${color}20;color:${color}">${escHtml(ph.label || `Phase ${phIdx + 1}`)}</span>`
-      : `<span class="yt-phase-chip" style="background:#8b949e20;color:#8b949e">Global</span>`;
+    const chip  = isCustom
+      ? `<span class="yt-phase-chip" style="background:rgba(46,168,196,.14);color:var(--teal)">Perso</span>`
+      : ph
+        ? `<span class="yt-phase-chip" style="background:${color}20;color:${color}">${escHtml(ph.label || `Phase ${phIdx + 1}`)}</span>`
+        : `<span class="yt-phase-chip" style="background:#8b949e20;color:#8b949e">Global</span>`;
     return `<tr><td>An ${an}</td><td>${chip}</td><td>${mens} €</td><td>${taux >= 0 ? '+' : ''}${taux} %</td></tr>`;
   }).join('');
 
@@ -850,6 +982,150 @@ function renderYearTable(p) {
         <tbody>${rows}</tbody>
       </table>
     </div>`;
+}
+
+/* ── Personnalisation fine : année par année & mois par mois ── */
+const MOIS_LABELS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Août', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+function nbOverrideYears() {
+  return Object.keys(overrides).length;
+}
+
+/** Valeurs héritées (phase ou globaux) pour une année, hors overrides */
+function baseParamsForYear(p, an) {
+  const phIdx = phases.findIndex(ph => an >= ph.anneeDebut && an <= ph.anneeFin);
+  const ph    = phIdx >= 0 ? phases[phIdx] : null;
+  return {
+    mensuel: ph ? ph.mensuel : Math.round(p.mensuel * Math.pow(1 + p.aug / 100, an - 1) * 100) / 100,
+    taux:    ph ? ph.taux    : p.taux,
+    phIdx,
+  };
+}
+
+/** Supprime l'entrée d'une année si elle ne contient plus aucune personnalisation */
+function cleanOverride(an) {
+  const ov = overrides[an];
+  if (!ov) return;
+  if (ov.mois && !Object.keys(ov.mois).length) delete ov.mois;
+  if (ov.mensuel == null && ov.taux == null && !ov.mois) delete overrides[an];
+}
+
+function setYearOverride(an, field, value) {
+  if (!overrides[an]) overrides[an] = {};
+  if (value == null) delete overrides[an][field];
+  else overrides[an][field] = value;
+  cleanOverride(an);
+}
+
+function setMonthOverride(an, mois, field, value) {
+  if (!overrides[an])           overrides[an] = {};
+  if (!overrides[an].mois)      overrides[an].mois = {};
+  if (!overrides[an].mois[mois]) overrides[an].mois[mois] = {};
+  if (value == null) {
+    delete overrides[an].mois[mois][field];
+    if (!Object.keys(overrides[an].mois[mois]).length) delete overrides[an].mois[mois];
+  } else {
+    overrides[an].mois[mois][field] = value;
+  }
+  cleanOverride(an);
+}
+
+function adjustOverridesForDuration(duree) {
+  let changed = false;
+  for (const k of Object.keys(overrides)) {
+    if (+k > duree) { delete overrides[k]; expandedYears.delete(+k); changed = true; }
+  }
+  return changed;
+}
+
+function renderAnnees(p) {
+  const wrap     = document.getElementById('annees-table');
+  const badge    = document.getElementById('annees-badge');
+  const btnReset = document.getElementById('btn-annees-reset');
+  if (!wrap) return;
+
+  const nbOv = nbOverrideYears();
+  if (badge) {
+    badge.textContent = nbOv ? `${nbOv} an${nbOv > 1 ? 's' : ''} perso` : '';
+    badge.classList.toggle('show', nbOv > 0);
+  }
+  if (btnReset) btnReset.style.display = nbOv ? '' : 'none';
+
+  // Ne pas reconstruire la table pendant une saisie (re-render venu d'un autre
+  // contrôle) — mais seulement si c'est un champ de saisie qui a le focus :
+  // les boutons (déplier ▸, effacer ✕) doivent re-rendre immédiatement.
+  if (wrap.contains(document.activeElement) &&
+      document.activeElement.tagName === 'INPUT') return;
+
+  const prevScroll = wrap.querySelector('.an-table-wrap')?.scrollTop || 0;
+
+  const rows = [];
+  for (let an = 1; an <= p.duree; an++) {
+    const base     = baseParamsForYear(p, an);
+    const ov       = overrides[an] || {};
+    const mensEff  = ov.mensuel != null ? ov.mensuel : base.mensuel;
+    const tauxEff  = ov.taux    != null ? ov.taux    : base.taux;
+    const nbMois   = ov.mois ? Object.keys(ov.mois).length : 0;
+    const isCustom = ov.mensuel != null || ov.taux != null || nbMois > 0;
+    const isOpen   = expandedYears.has(an);
+
+    let chip;
+    if (isCustom) {
+      chip = `<span class="yt-phase-chip" style="background:rgba(46,168,196,.14);color:var(--teal)">Perso</span>`;
+    } else if (base.phIdx >= 0) {
+      const color = PHASE_PALETTE[base.phIdx % PHASE_PALETTE.length].bar;
+      chip = `<span class="yt-phase-chip" style="background:${color}20;color:${color}">${escHtml(phases[base.phIdx].label || `Phase ${base.phIdx + 1}`)}</span>`;
+    } else {
+      chip = `<span class="yt-phase-chip" style="background:#8b949e20;color:#8b949e">Global</span>`;
+    }
+    const moisBadge = nbMois
+      ? ` <span class="an-mois-badge">${nbMois} mois perso</span>` : '';
+
+    rows.push(`
+      <tr class="an-row ${isCustom ? 'an-custom' : ''}" data-an="${an}">
+        <td class="an-cell-year">
+          <button class="an-expand ${isOpen ? 'open' : ''}" data-action="expand" title="Régler chaque mois">${isOpen ? '▾' : '▸'}</button>
+          An ${an}
+        </td>
+        <td><input class="an-input an-mens ${ov.mensuel != null ? 'ovr' : ''}" type="number" min="0" step="10" value="${mensEff}"></td>
+        <td><input class="an-input an-taux ${ov.taux != null ? 'ovr' : ''}" type="number" min="-50" max="50" step="0.1" value="${tauxEff}"></td>
+        <td>${chip}${moisBadge}</td>
+        <td class="an-cell-clear">${isCustom ? `<button class="an-clear" data-action="clear" title="Revenir aux valeurs héritées">✕</button>` : ''}</td>
+      </tr>`);
+
+    if (isOpen) {
+      const cells = MOIS_LABELS.map((lbl, mi) => {
+        const m   = mi + 1;
+        const ovM = (ov.mois && ov.mois[m]) || {};
+        return `
+          <div class="mois-cell">
+            <div class="mois-lbl">${lbl}</div>
+            <input class="an-input m-vers ${ovM.versement != null ? 'ovr' : ''}" data-mois="${m}" type="number" min="0" step="10"
+                   placeholder="${mensEff}" value="${ovM.versement != null ? ovM.versement : ''}" title="Versement du mois (€)">
+            <input class="an-input m-taux ${ovM.taux != null ? 'ovr' : ''}" data-mois="${m}" type="number" min="-99" max="200" step="0.1"
+                   placeholder="${tauxEff}" value="${ovM.taux != null ? ovM.taux : ''}" title="Rendement annualisé appliqué ce mois (%)">
+          </div>`;
+      }).join('');
+      rows.push(`
+        <tr class="an-months-row" data-an="${an}">
+          <td colspan="5">
+            <div class="mois-head">Par mois — versement (€) en haut, rendement annualisé (%) en bas. Vide = hérite de l'année.</div>
+            <div class="mois-grid">${cells}</div>
+          </td>
+        </tr>`);
+    }
+  }
+
+  wrap.innerHTML = `
+    <div class="year-table-wrap an-table-wrap">
+      <table class="year-table an-table">
+        <thead><tr><th>Année</th><th>Versement €/mois</th><th>Rendement %/an</th><th>Source</th><th></th></tr></thead>
+        <tbody>${rows.join('')}</tbody>
+      </table>
+    </div>`;
+
+  const newWrap = wrap.querySelector('.an-table-wrap');
+  if (newWrap && prevScroll) newWrap.scrollTop = prevScroll;
 }
 
 /* ── Tableau année par année enrichi ─────────────────────── */
@@ -866,7 +1142,8 @@ function renderTable(d, phases, vps) {
     const phase   = phIdx >= 0 ? phases[phIdx] : null;
     const phaseLabel = phase ? (phase.label || `Phase ${phIdx + 1}`) : null;
     const phaseColor = phase ? PHASE_PALETTE[phIdx % PHASE_PALETTE.length].bar : null;
-    const rendAn  = phase ? phase.taux : p.taux;
+    // Taux effectif de l'année (tient compte des overrides année/mois)
+    const rendAn  = d.tauxAnL ? d.tauxAnL[i] : (phase ? phase.taux : p.taux);
     const cagr    = (i > 0 && d.totL[0] > 0)
       ? (Math.pow(d.totL[i] / d.totL[0], 1 / an) - 1) * 100
       : null;
@@ -1022,11 +1299,13 @@ function computeAndRender() {
 
   // Ajuster les phases si la durée a changé, re-rendre si des phases ont disparu
   if (adjustPhasesForDuration(p.duree)) renderPhases();
+  adjustOverridesForDuration(p.duree);
 
   const opts = { plafond, ...auOpts };
-  const d    = compute(p, vps, opts, phases);
-  // Scénario de référence sans phases — pour la courbe comparative et l'écart KPI
-  const dBase = phases.length > 0 ? compute(p, vps, opts, []) : null;
+  const d    = compute(p, vps, opts, phases, overrides);
+  // Scénario de référence sans personnalisation — pour la courbe comparative et l'écart KPI
+  const hasPerso = phases.length > 0 || nbOverrideYears() > 0;
+  const dBase = hasPerso ? compute(p, vps, opts, [], {}) : null;
   const fisc  = computeFiscal(d, { couple });
 
   /* Header */
@@ -1140,6 +1419,9 @@ function computeAndRender() {
   /* Graphiques */
   updateCharts(d, dBase, phases);
 
+  /* Phase de rente */
+  renderRente(d, p);
+
   /* KPI — phases de vie */
   const nbPhSub    = document.getElementById('kpi-nb-phases-sub');
   const nbPhEl     = document.getElementById('kpi-nb-phases');
@@ -1172,6 +1454,9 @@ function computeAndRender() {
   /* Phases — tableau année par année */
   renderYearTable(p);
 
+  /* Personnalisation année/mois */
+  renderAnnees(p);
+
   /* Tableau enrichi */
   _lastTableData = { d, phases: [...phases], vps: [...vps] };
   renderTable(d, phases, vps);
@@ -1195,6 +1480,69 @@ function applyPreset(name) {
   computeAndRender();
   document.querySelectorAll('.preset-btn').forEach(btn =>
     btn.classList.toggle('active', btn.dataset.preset === name));
+}
+
+/* ── Partir de mon PEA réel ──────────────────────────────────
+   Lit les données du tracker (même origine → même localStorage) :
+   apport initial = valeur actuelle du portefeuille,
+   versement mensuel = moyenne des achats des 12 derniers mois. */
+function applyPEAReel() {
+  const note = document.getElementById('pea-reel-note');
+  const show = html => { if (note) { note.innerHTML = html; note.style.display = ''; } };
+
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem('pea_tracker_data')); } catch (_) {}
+  const ops   = data && Array.isArray(data.operations) ? data.operations : [];
+  const cours = (data && data.cours_actuels) || {};
+
+  const achats = ops.filter(o => o.type === 'achat' && o.etf_isin);
+  if (!achats.length) {
+    show('<strong>Tracker vide</strong> — aucune opération d\'achat trouvée. ' +
+         'Saisis tes opérations dans le <a href="../tracker/index.html">Tracker</a> ' +
+         '(même navigateur, page servie par l\'API), puis reviens ici.');
+    return;
+  }
+
+  /* Valeur actuelle : quantités nettes × dernier cours connu (sinon coût résiduel) */
+  const pos = {}; // isin -> { qte, cout }
+  for (const op of ops) {
+    if (!op.etf_isin || (op.type !== 'achat' && op.type !== 'vente')) continue;
+    const p = pos[op.etf_isin] || (pos[op.etf_isin] = { qte: 0, cout: 0 });
+    if (op.type === 'achat') {
+      p.qte  += op.quantite || 0;
+      p.cout += (op.montant_total || 0) - (op.frais || 0);
+    } else {
+      const ratio = p.qte > 0 ? (op.quantite || 0) / p.qte : 0;
+      p.cout -= p.cout * ratio;
+      p.qte  -= op.quantite || 0;
+    }
+  }
+  let valeur = 0, sansCours = false;
+  for (const [isin, p] of Object.entries(pos)) {
+    if (p.qte <= 0.000001) continue;
+    const c = cours[isin] && cours[isin].cours;
+    if (c) { valeur += p.qte * c; } else { valeur += p.cout; sansCours = true; }
+  }
+
+  /* Rythme : moyenne mensuelle des achats sur 12 mois glissants
+     (ou depuis le 1er achat si l'historique est plus court) */
+  const seuil       = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+  const investi12m  = achats.filter(o => o.date >= seuil)
+                            .reduce((s, o) => s + (o.montant_total || 0), 0);
+  const premier     = achats.map(o => o.date).sort()[0];
+  const moisHist    = Math.max(1, Math.min(12,
+    Math.ceil((Date.now() - new Date(premier).getTime()) / (30.44 * 86400000))));
+  const mensuel     = Math.round(investi12m / moisHist);
+
+  applyParams({ apport: Math.round(valeur), mensuel });
+  document.querySelectorAll('.preset-btn').forEach(b =>
+    b.classList.toggle('active', b.id === 'btn-pea-reel'));
+  computeAndRender();
+
+  show(`<strong>Paramètres repris de ton PEA réel</strong> — apport initial : ${fmt(Math.round(valeur))} ` +
+       `(valeur actuelle du portefeuille${sansCours ? ' ; cours manquants remplacés par le coût d\'achat' : ''}), ` +
+       `versement : ${mensuel} €/mois (moyenne des ${moisHist} dernier${moisHist > 1 ? 's' : ''} mois). ` +
+       `Durée, rendement et les autres paramètres restent les tiens.`);
 }
 
 /* ── Tooltips ────────────────────────────────────────────── */
@@ -1243,6 +1591,18 @@ function init() {
   document.getElementById('n-taux-aude').addEventListener('change',  computeAndRender);
   document.getElementById('n-frais-aude').addEventListener('change', computeAndRender);
 
+  /* Phase de rente : activation + paramètres */
+  document.getElementById('cb-rente').addEventListener('change', () => {
+    document.getElementById('rente-params').className =
+      document.getElementById('cb-rente').checked ? 'aude-params-visible' : 'aude-params-hidden';
+    computeAndRender();
+  });
+  document.getElementById('cb-rente-index').addEventListener('change', computeAndRender);
+  document.getElementById('n-rente').addEventListener('input',       debouncedRender);
+  document.getElementById('n-taux-rente').addEventListener('input',  debouncedRender);
+  document.getElementById('n-rente').addEventListener('change',      computeAndRender);
+  document.getElementById('n-taux-rente').addEventListener('change', computeAndRender);
+
   /* Versements ponctuels */
   document.getElementById('vp-list').addEventListener('change', e => {
     const row = e.target.closest('[data-id]'); if (!row) return;
@@ -1273,6 +1633,9 @@ function init() {
   document.querySelectorAll('.preset-btn').forEach(btn =>
     btn.addEventListener('click', () => applyPreset(btn.dataset.preset)));
 
+  /* Partir de mon PEA réel (données du tracker) */
+  document.getElementById('btn-pea-reel')?.addEventListener('click', applyPEAReel);
+
   /* Réinitialiser */
   document.getElementById('btn-reset').addEventListener('click', () => {
     applyParams(DEFAULTS);
@@ -1280,10 +1643,15 @@ function init() {
     document.getElementById('cb-couple').checked = false;
     document.getElementById('cb-aude').checked   = false;
     document.getElementById('aude-params').className = 'aude-params-hidden';
+    document.getElementById('cb-rente').checked  = false;
+    document.getElementById('rente-params').className = 'aude-params-hidden';
     vps = []; renderVP();
     phases = []; editingPhaseId = null;
+    overrides = {}; expandedYears.clear();
     const explainEl = document.getElementById('scenario-explain');
     if (explainEl) explainEl.style.display = 'none';
+    const peaReelNote = document.getElementById('pea-reel-note');
+    if (peaReelNote) peaReelNote.style.display = 'none';
     renderPhases();
     document.querySelectorAll('.preset-btn').forEach(b => b.classList.remove('active'));
     computeAndRender();
@@ -1367,6 +1735,59 @@ function init() {
     showYearView = !showYearView;
     renderYearTable(getParams());
   });
+
+  /* ── Personnalisation année/mois ─────────────────────────── */
+  const anneesTable = document.getElementById('annees-table');
+  if (anneesTable) {
+    anneesTable.addEventListener('click', e => {
+      const btn = e.target.closest('[data-action]'); if (!btn) return;
+      const row = btn.closest('[data-an]');          if (!row) return;
+      const an  = +row.dataset.an;
+      if (btn.dataset.action === 'expand') {
+        if (expandedYears.has(an)) expandedYears.delete(an);
+        else expandedYears.add(an);
+        renderAnnees(getParams());
+      } else if (btn.dataset.action === 'clear') {
+        delete overrides[an];
+        renderAnnees(getParams());
+        computeAndRender();
+      }
+    });
+
+    anneesTable.addEventListener('change', e => {
+      const row = e.target.closest('[data-an]'); if (!row) return;
+      const an  = +row.dataset.an;
+      const t   = e.target;
+      const p    = getParams();
+      const base = baseParamsForYear(p, an);
+      const num  = t.value === '' ? null : +t.value;
+
+      if (t.classList.contains('an-mens')) {
+        setYearOverride(an, 'mensuel', num != null && num !== base.mensuel ? Math.max(0, num) : null);
+      } else if (t.classList.contains('an-taux')) {
+        setYearOverride(an, 'taux', num != null && num !== base.taux ? clamp(num, -50, 50) : null);
+      } else if (t.classList.contains('m-vers')) {
+        setMonthOverride(an, +t.dataset.mois, 'versement', num != null ? Math.max(0, num) : null);
+      } else if (t.classList.contains('m-taux')) {
+        setMonthOverride(an, +t.dataset.mois, 'taux', num != null ? clamp(num, -99, 200) : null);
+      } else {
+        return;
+      }
+      t.blur(); // libérer le focus pour autoriser la reconstruction de la table
+      computeAndRender();
+    });
+  }
+
+  const btnAnneesReset = document.getElementById('btn-annees-reset');
+  if (btnAnneesReset) {
+    btnAnneesReset.addEventListener('click', () => {
+      if (!confirm('Supprimer toutes les personnalisations année/mois ?')) return;
+      overrides = {};
+      expandedYears.clear();
+      renderAnnees(getParams());
+      computeAndRender();
+    });
+  }
 
   /* ── Dropdown scénarios ──────────────────────────────────── */
   document.getElementById('btn-scenario').addEventListener('click', e => {

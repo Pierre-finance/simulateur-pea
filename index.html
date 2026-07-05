@@ -9,6 +9,15 @@
 <body>
 <div class="container">
 
+  <!-- Navigation écosystème -->
+  <nav class="app-switch">
+    <a href="../index.html">🏠 Accueil</a>
+    <span class="current">📈 Simulateur</span>
+    <a href="../tracker/index.html">📊 Tracker</a>
+    <a href="../actualites/index.html">📰 Actualités</a>
+    <a href="../entreprises/index.html">🏢 Entreprises</a>
+  </nav>
+
   <!-- Header -->
   <header>
     <div class="badge">Plan d'Épargne en Actions</div>
@@ -22,6 +31,9 @@
     <button class="preset-btn" data-preset="conservateur">Conservateur — 100 €/mois · 4 %</button>
     <button class="preset-btn" data-preset="equilibre">Équilibré — 200 €/mois · 7 %</button>
     <button class="preset-btn" data-preset="ambitieux">Ambitieux — 500 €/mois · 8 %</button>
+    <button class="preset-btn" id="btn-pea-reel"
+            title="Reprend la valeur actuelle et le rythme de versement de ton tracker (même navigateur)">
+      📊 Partir de mon PEA réel</button>
     <span class="presets-sep"></span>
     <div class="scenario-wrap" id="scenario-wrap">
       <button class="scenario-btn" id="btn-scenario">Scénarios ▾</button>
@@ -51,6 +63,10 @@
       </div>
     </div>
   </div>
+
+  <!-- Feedback « Partir de mon PEA réel » -->
+  <div id="pea-reel-note" class="scenario-explain"
+       style="display:none; max-width: 1080px; margin: 0 auto .85rem; padding-left: .9rem; padding-right: .9rem;"></div>
 
   <!-- Controls – bloc 1 : 4 paramètres principaux -->
   <div class="controls-section">
@@ -82,10 +98,11 @@
         </span>
         <div class="ctrl-value-row">
           <span class="ctrl-value gold" id="cv-taux">7 %</span>
-          <input class="ctrl-num" type="number" id="n-taux" min="0" max="15" step="0.1" value="7">
+          <input class="ctrl-num" type="number" id="n-taux" min="0" max="20" step="0.1" value="7">
         </div>
-        <input type="range" id="s-taux" min="0" max="15" step="0.1" value="7">
-        <div class="ctrl-minmax"><span>0 %</span><span>15 %</span></div>
+        <input type="range" id="s-taux" min="0" max="20" step="0.1" value="7">
+        <div class="ctrl-minmax"><span>0 %</span><span>20 %</span></div>
+        <div class="ctrl-net-hint" id="taux-net-hint"></div>
       </div>
 
       <div class="ctrl-card">
@@ -343,6 +360,79 @@
       <button class="btn-year-view" id="btn-year-view">Vue tableau — paramètres par année</button>
       <div id="phases-year-table" style="display:none"></div>
 
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  RÉGLAGES ANNÉE PAR ANNÉE & MOIS PAR MOIS (dépliable)  -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="coll-card" id="coll-annees">
+    <button class="coll-trigger" onclick="toggleColl('coll-annees')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
+      </svg>
+      <span class="coll-label-full">Réglages fins — année par année &amp; mois par mois</span><span class="coll-label-short">Année / mois</span>
+      <span class="coll-badge" id="annees-badge" style="background:rgba(46,168,196,.14);color:var(--teal)"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+      <p class="annees-hint">
+        Ajustez le versement et le rendement de <strong>chaque année</strong>, ou dépliez une année
+        pour régler <strong>chaque mois</strong> individuellement.
+        Priorité d'application : mois &gt; année &gt; phase de vie &gt; paramètres globaux.
+      </p>
+      <div id="annees-table"></div>
+      <button class="btn-vp-add" id="btn-annees-reset" style="display:none">↺ Réinitialiser toutes les personnalisations année/mois</button>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <!--  PHASE DE RENTE — vivre de son PEA (dépliable)         -->
+  <!-- ═══════════════════════════════════════════════════════ -->
+  <div class="coll-card" id="coll-rente">
+    <button class="coll-trigger" onclick="toggleColl('coll-rente')">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+        <path d="M8 4.5a.5.5 0 0 1 .5.5v3.5H11a.5.5 0 0 1 0 1H8a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5z"/>
+      </svg>
+      <span class="coll-label-full">Phase de rente — vivre de son PEA</span><span class="coll-label-short">Rente</span>
+      <span class="coll-badge" id="rente-badge" style="background:rgba(63,185,80,.14);color:var(--green)"></span>
+      <span class="coll-arrow">›</span>
+    </button>
+    <div class="coll-body">
+      <div class="fisc-cb-row">
+        <input class="cb-custom" type="checkbox" id="cb-rente">
+        <label for="cb-rente">À la fin de la période d'épargne, retirer une rente mensuelle du capital PEA.
+          Retraits après 5 ans : prélèvements sociaux 17.2 % sur la part de plus-value de chaque retrait,
+          le reste du capital continue de fructifier.</label>
+      </div>
+      <div id="rente-params" class="aude-params-hidden">
+        <div class="aude-grid">
+          <div class="aude-field">
+            <label class="aude-lbl">Rente nette souhaitée (€ / mois)</label>
+            <input class="vp-input" type="number" id="n-rente" min="0" step="50" value="1000">
+          </div>
+          <div class="aude-field">
+            <label class="aude-lbl">Rendement pendant la rente (%)</label>
+            <input class="vp-input" type="number" id="n-taux-rente" min="0" max="15" step="0.5" value="4">
+          </div>
+          <div class="aude-field">
+            <label class="aude-lbl">Indexation sur l'inflation</label>
+            <div class="fisc-cb-row" style="margin:0">
+              <input class="cb-custom" type="checkbox" id="cb-rente-index" checked>
+              <label for="cb-rente-index">rente revalorisée chaque année</label>
+            </div>
+          </div>
+        </div>
+        <div id="rente-results"></div>
+        <div class="chart-wrap" style="height:260px; margin-top:1.25rem;">
+          <canvas id="chartRente"></canvas>
+        </div>
+        <p class="annees-hint" style="margin-top:.9rem">
+          Le rendement en phase de rente est souvent plus prudent qu'en phase d'épargne
+          (allocation moins risquée à l'approche des retraits). Horizon simulé : 50 ans.
+        </p>
+      </div>
     </div>
   </div>
 

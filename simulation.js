@@ -100,6 +100,14 @@ function fmtAbs(n) {
   return Math.abs(n).toLocaleString('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 });
 }
 
+/**
+ * Taux mensuel équivalent à un taux annuel (conversion géométrique).
+ * (1 + taux/100)^(1/12) − 1 : capitaliser 12 mois redonne exactement le taux annuel.
+ */
+function tauxMensuel(tauxAnnuel) {
+  return Math.pow(1 + tauxAnnuel / 100, 1 / 12) - 1;
+}
+
 /* ── Calcul principal ────────────────────────────────────── */
 
 /**
@@ -124,15 +132,18 @@ function fmtAbs(n) {
  * @param {Array}  phases - Phases de vie [{anneeDebut, anneeFin, mensuel, taux, label}]
  *                          Si vide, p.mensuel / p.taux / p.aug s'appliquent uniformément.
  *                          Si défini, chaque année utilise la phase qui la couvre (ou p si aucune).
+ * @param {Object} overrides - Personnalisation fine par année/mois :
+ *                          { [annee]: { mensuel?, taux?, mois?: { [1..12]: { versement?, taux? } } } }
+ *                          Priorité : mois > année > phase > paramètres globaux.
  */
-function compute(p, vps = [], opts = {}, phases = []) {
+function compute(p, vps = [], opts = {}, phases = [], overrides = {}) {
   const fraisR   = p.frais     / 100;
   const augR     = p.aug       / 100;
   const inflR    = p.inflation / 100;
 
   const plafond      = opts.plafond      ?? PLAFONDS.pea;
   const enveloppe    = opts.enveloppe    ?? null;
-  const tauxAuDelaM  = ((opts.tauxAuDela  != null ? opts.tauxAuDela  : p.taux)  / 100) / 12;
+  const tauxAuDelaM  = tauxMensuel(opts.tauxAuDela != null ? opts.tauxAuDela : p.taux);
   const fraisAuDelaR =  (opts.fraisAuDela != null ? opts.fraisAuDela : p.frais)  / 100;
 
   const apportInPEA = Math.min(p.apport, plafond);
@@ -140,7 +151,7 @@ function compute(p, vps = [], opts = {}, phases = []) {
 
   // Séries annuelles
   const yrs = [], versL = [], gainL = [], totL = [], reelL = [], fraisL = [];
-  const capAuDelaL = [], phaseIdxL = [];
+  const capAuDelaL = [], phaseIdxL = [], mensAnL = [], tauxAnL = [];
 
   let cap         = apportInPEA;
   let versé       = apportInPEA;
@@ -158,34 +169,46 @@ function compute(p, vps = [], opts = {}, phases = []) {
     // ── Sélection des paramètres de cette année ──
     const phIdx = phases.findIndex(ph => an >= ph.anneeDebut && an <= ph.anneeFin);
     const phase = phIdx >= 0 ? phases[phIdx] : null;
+    const ov    = overrides[an] || null;
 
-    // Si une phase couvre cette année, elle définit mensuel ET taux.
-    // Sinon, on utilise les paramètres globaux (avec aug sur mensuel).
-    const mensuelAn = phase ? phase.mensuel : p.mensuel * Math.pow(1 + augR, an - 1);
-    const tauxAn    = phase ? phase.taux    : p.taux;
-    const tauxM     = tauxAn / 100 / 12;
+    // Priorité : override année > phase > paramètres globaux (avec aug sur mensuel).
+    const mensuelBase = phase ? phase.mensuel : p.mensuel * Math.pow(1 + augR, an - 1);
+    const mensuelAn   = ov && ov.mensuel != null ? ov.mensuel : mensuelBase;
+    const tauxAn      = ov && ov.taux    != null ? ov.taux    : (phase ? phase.taux : p.taux);
 
-    totalMensuelW += mensuelAn;
-    totalTauxW    += tauxAn;
+    // Moyennes effectives de l'année (tiennent compte des mois personnalisés)
+    let sumVers = 0, sumTaux = 0;
 
     // ── 12 mois de capitalisation ──
-    for (let m = 0; m < 12; m++) {
+    for (let m = 1; m <= 12; m++) {
+      const ovM      = ov && ov.mois ? ov.mois[m] : null;
+      const versMois = ovM && ovM.versement != null ? ovM.versement : mensuelAn;
+      const tauxMois = ovM && ovM.taux      != null ? ovM.taux      : tauxAn;
+      const tauxM    = tauxMensuel(tauxMois);
+      sumVers += versMois;
+      sumTaux += tauxMois;
+
       let inPEA = 0, auDela = 0;
 
       if (versNets < plafond) {
-        inPEA  = Math.min(mensuelAn, plafond - versNets);
-        auDela = mensuelAn - inPEA;
+        inPEA  = Math.min(versMois, plafond - versNets);
+        auDela = versMois - inPEA;
         versé    += inPEA;
         versNets += inPEA;
         if (versNets >= plafond && plafondAn === null) plafondAn = an;
       } else {
-        auDela = mensuelAn;
+        auDela = versMois;
       }
 
       cap = (cap + inPEA) * (1 + tauxM);
       verseAuDela += auDela;
       if (enveloppe) capAuDela = (capAuDela + auDela) * (1 + tauxAuDelaM);
     }
+
+    const mensEffAn = sumVers / 12;
+    const tauxEffAn = sumTaux / 12;
+    totalMensuelW += mensEffAn;
+    totalTauxW    += tauxEffAn;
 
     // ── Frais ETF PEA (annuels) ──
     const f = cap * fraisR;
@@ -215,12 +238,14 @@ function compute(p, vps = [], opts = {}, phases = []) {
     fraisL.push(fraisCum);
     capAuDelaL.push(enveloppe ? capAuDela : 0);
     phaseIdxL.push(phIdx); // -1 = paramètres globaux
+    mensAnL.push(mensEffAn);
+    tauxAnL.push(tauxEffAn);
   }
 
   if (!totL.length) {
     return {
       yrs: [], versL: [], gainL: [], totL: [], reelL: [], fraisL: [],
-      capAuDelaL: [], phaseIdxL: [],
+      capAuDelaL: [], phaseIdxL: [], mensAnL: [], tauxAnL: [],
       versé: 0, final: 0, gain: 0, reel: 0, fraisTot: 0, mult: 0,
       plafondAn: null, versNets: 0, verseAuDela: 0,
       capAuDelaFinal: 0, gainAuDela: 0,
@@ -230,7 +255,7 @@ function compute(p, vps = [], opts = {}, phases = []) {
 
   const i = totL.length - 1;
   return {
-    yrs, versL, gainL, totL, reelL, fraisL, capAuDelaL, phaseIdxL,
+    yrs, versL, gainL, totL, reelL, fraisL, capAuDelaL, phaseIdxL, mensAnL, tauxAnL,
     versé:          versL[i],
     final:          totL[i],
     gain:           gainL[i],
@@ -246,6 +271,95 @@ function compute(p, vps = [], opts = {}, phases = []) {
     mensuelMoyen:   p.duree > 0 ? totalMensuelW / p.duree : p.mensuel,
     tauxMoyen:      p.duree > 0 ? totalTauxW    / p.duree : p.taux,
   };
+}
+
+/* ── Phase de rente (décumulation) ───────────────────────── */
+
+/** Prélèvements sociaux sur la plus-value des retraits PEA (> 5 ans) */
+const PS_PEA = 0.172;
+
+/**
+ * Simule la phase de rente : on retire chaque mois le brut nécessaire pour
+ * obtenir la rente nette demandée, le reste du capital continue de fructifier.
+ * Fiscalité PEA > 5 ans : chaque retrait est composé pro-rata de versements
+ * (non taxés) et de plus-value (PS 17.2 %), comme le calcule la banque.
+ *
+ * @param {Object}  p
+ * @param {number}  p.capital     Capital PEA au départ de la rente (€)
+ * @param {number}  p.versements  Versements nets cumulés — base non taxée (€)
+ * @param {number}  p.renteNette  Rente mensuelle nette souhaitée (€)
+ * @param {number}  p.taux        Rendement annuel brut pendant la rente (%)
+ * @param {number}  p.frais       Frais annuels ETF (%)
+ * @param {number}  p.inflation   Inflation annuelle (%) — pour indexer la rente
+ * @param {boolean} p.indexer     Revaloriser la rente de l'inflation chaque année
+ * @param {number}  p.dureeMax    Horizon simulé en années (défaut 50)
+ * @returns {Object} { capL, retraitL, psL, moisEpuisement, capFinal,
+ *                     retraitNetTotal, psTotal, renteFinale }
+ *                   moisEpuisement = null si le capital survit à l'horizon.
+ */
+function computeRente(p) {
+  const dureeMax = p.dureeMax || 50;
+  const tauxM    = tauxMensuel(p.taux);
+  const fraisR   = (p.frais || 0) / 100;
+  const inflR    = (p.inflation || 0) / 100;
+
+  let cap   = p.capital;
+  let vers  = Math.min(Math.max(0, p.versements), p.capital);
+  let rente = Math.max(0, p.renteNette);
+
+  const capL = [], retraitL = [], psL = [];
+  let retraitNetCum = 0, psCum = 0, moisEpuisement = null;
+
+  outer:
+  for (let an = 1; an <= dureeMax; an++) {
+    let retraitAn = 0;
+    for (let m = 1; m <= 12; m++) {
+      // Part de plus-value du capital → brut à retirer pour la rente nette
+      const gainShare = cap > 0 ? Math.max(0, 1 - vers / cap) : 0;
+      const brut      = rente / (1 - PS_PEA * gainShare);
+
+      if (brut >= cap) {
+        // Dernier retrait partiel : on vide le PEA
+        const net = cap * (1 - PS_PEA * gainShare);
+        retraitNetCum += net; retraitAn += net; psCum += cap - net;
+        cap = 0; vers = 0;
+        moisEpuisement = (an - 1) * 12 + m;
+        capL.push(0); retraitL.push(retraitAn); psL.push(psCum);
+        break outer;
+      }
+
+      vers = Math.max(0, vers - brut * (vers / cap));
+      cap -= brut;
+      retraitNetCum += rente; retraitAn += rente; psCum += brut - rente;
+      cap *= 1 + tauxM;
+    }
+    cap -= cap * fraisR;
+    capL.push(cap); retraitL.push(retraitAn); psL.push(psCum);
+    if (p.indexer) rente *= 1 + inflR;
+  }
+
+  return {
+    capL, retraitL, psL,
+    moisEpuisement,
+    capFinal:        cap,
+    retraitNetTotal: retraitNetCum,
+    psTotal:         psCum,
+    renteFinale:     rente,
+  };
+}
+
+/**
+ * Rente nette mensuelle maximale (au mois 1) telle que le capital n'est pas
+ * épuisé au bout de `annees` années — trouvée par dichotomie sur computeRente.
+ */
+function renteMaxPourDuree(p, annees) {
+  let lo = 0, hi = Math.max(100, p.capital);
+  for (let i = 0; i < 40; i++) {
+    const mid = (lo + hi) / 2;
+    const r = computeRente({ ...p, renteNette: mid, dureeMax: annees });
+    if (r.moisEpuisement === null) lo = mid; else hi = mid;
+  }
+  return lo;
 }
 
 /* ── Comparaison fiscale ─────────────────────────────────── */

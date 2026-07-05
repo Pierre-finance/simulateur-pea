@@ -234,6 +234,88 @@ function initCharts() {
   });
 }
 
+/* ── Graphique 3 : phase de rente (décumulation) ─────────── */
+
+let chartRente = null;
+
+/**
+ * Met à jour (et crée au premier appel) la courbe de décumulation :
+ * capital PEA restant vs retraits nets cumulés, année par année.
+ * Création paresseuse : le canvas vit dans une section repliée par défaut.
+ * @param {Object|null} res - Résultat de computeRente(), ou null pour vider
+ */
+function updateRenteChart(res) {
+  const el = document.getElementById('chartRente');
+  if (!el) return;
+  if (!res) {
+    if (chartRente) {
+      chartRente.data.labels = [];
+      chartRente.data.datasets.forEach(ds => { ds.data = []; });
+      chartRente.update();
+    }
+    return;
+  }
+
+  if (!chartRente) {
+    chartRente = new Chart(el, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Capital PEA restant',
+            data: [], borderColor: '#3fb950', backgroundColor: 'rgba(63,185,80,.07)',
+            fill: true, tension: .35, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4,
+          },
+          {
+            label: 'Retraits nets cumulés',
+            data: [], borderColor: '#d29922', backgroundColor: 'transparent',
+            fill: false, tension: 0, borderWidth: 1.5, borderDash: [4, 3],
+            pointRadius: 0, pointHoverRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 200 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { boxWidth: 22, padding: 14, usePointStyle: true, pointStyleWidth: 18 },
+          },
+          tooltip: {
+            ...TT,
+            callbacks: {
+              label: ctx => ctx.parsed.y == null ? null
+                : ` ${ctx.dataset.label} : ${fmt(ctx.parsed.y)}`,
+            },
+          },
+        },
+        scales: {
+          x: { grid: { color: 'rgba(33,38,45,.8)' }, ticks: { maxTicksLimit: 10 } },
+          y: {
+            grid: { color: 'rgba(33,38,45,.8)' },
+            ticks: {
+              callback: v =>
+                v >= 1e6 ? `${(v / 1e6).toFixed(1)}M €` :
+                v >= 1e3 ? `${(v / 1e3).toFixed(0)}k €` : `${v} €`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  const cumRetraits = [];
+  res.retraitL.reduce((s, v, i) => (cumRetraits[i] = s + v, s + v), 0);
+
+  chartRente.data.labels           = res.capL.map((_, i) => `An +${i + 1}`);
+  chartRente.data.datasets[0].data = res.capL;
+  chartRente.data.datasets[1].data = cumRetraits;
+  chartRente.update();
+}
+
 /**
  * Met à jour les deux graphiques avec les nouvelles données de simulation.
  * @param {Object}      data     - Résultat de compute() avec phases actives

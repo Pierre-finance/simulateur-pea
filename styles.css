@@ -28,6 +28,26 @@ body {
 
 .container { max-width: 1140px; margin: 0 auto; }
 
+/* ── Navigation écosystème ───────────────────────────────── */
+.app-switch {
+  display: flex; align-items: center; justify-content: center;
+  gap: .5rem; flex-wrap: wrap; margin-bottom: 1.4rem;
+}
+
+.app-switch a, .app-switch .current {
+  font-size: .78rem; font-weight: 600; text-decoration: none;
+  padding: .3rem .85rem; border-radius: 999px;
+  border: 1px solid var(--border); color: var(--muted);
+  transition: color .15s, border-color .15s;
+}
+
+.app-switch a:hover { color: var(--text); border-color: var(--muted); }
+
+.app-switch .current {
+  background: rgba(88,166,255,.12); color: var(--accent);
+  border-color: rgba(88,166,255,.35);
+}
+
 /* ── Header ─────────────────────────────────────────────── */
 header { text-align: center; margin-bottom: 2rem; }
 
@@ -726,6 +746,83 @@ tbody td:not(:first-child) { text-align: right; font-variant-numeric: tabular-nu
   font-weight: 600; white-space: nowrap;
 }
 .yt-global { color: var(--muted); }
+
+/* ── Personnalisation année par année & mois par mois ────── */
+.ctrl-net-hint {
+  margin-top: .45rem; font-size: .7rem; color: var(--muted);
+  line-height: 1.4;
+}
+.ctrl-net-hint strong { color: var(--teal); font-weight: 600; }
+
+.annees-hint {
+  font-size: .8rem; color: var(--muted); line-height: 1.55;
+  margin-bottom: .75rem;
+}
+.annees-hint strong { color: var(--text); font-weight: 600; }
+
+.an-table-wrap { max-height: 420px; }
+
+.an-table tbody td { padding: .3rem .55rem; }
+
+.an-input {
+  background: rgba(255,255,255,.04); border: 1px solid var(--border);
+  border-radius: 6px; color: var(--text); font-family: inherit;
+  font-size: .8rem; padding: .25rem .45rem; width: 92px;
+  text-align: right; font-variant-numeric: tabular-nums;
+  transition: border-color .15s;
+}
+.an-input:focus { outline: none; border-color: var(--accent); }
+.an-input.ovr { border-color: rgba(46,168,196,.55); background: rgba(46,168,196,.07); }
+
+.an-row.an-custom td:first-child { box-shadow: inset 3px 0 0 var(--teal); }
+
+.an-cell-year { white-space: nowrap; font-weight: 600; }
+
+.an-expand {
+  background: none; border: 1px solid var(--border); border-radius: 5px;
+  color: var(--muted); cursor: pointer; font-size: .72rem;
+  width: 1.35rem; height: 1.35rem; line-height: 1;
+  margin-right: .4rem; transition: all .15s; vertical-align: middle;
+}
+.an-expand:hover, .an-expand.open { color: var(--teal); border-color: rgba(46,168,196,.5); }
+
+.an-clear {
+  background: none; border: none; color: var(--muted); cursor: pointer;
+  font-size: .8rem; padding: .1rem .3rem; border-radius: 5px;
+  transition: color .15s;
+}
+.an-clear:hover { color: var(--red); }
+
+.an-mois-badge {
+  font-size: .64rem; padding: .06rem .35rem; border-radius: 4px;
+  background: rgba(46,168,196,.12); color: var(--teal); font-weight: 600;
+  white-space: nowrap;
+}
+
+.an-months-row td { background: rgba(255,255,255,.015); padding: .6rem .65rem !important; }
+
+.mois-head {
+  font-size: .68rem; color: var(--muted); margin-bottom: .5rem;
+  text-align: left;
+}
+
+.mois-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(88px, 1fr));
+  gap: .45rem;
+}
+
+.mois-cell {
+  display: flex; flex-direction: column; gap: .25rem;
+  background: rgba(255,255,255,.02); border: 1px solid var(--border);
+  border-radius: 7px; padding: .4rem;
+}
+.mois-cell .an-input { width: 100%; font-size: .74rem; padding: .2rem .35rem; }
+
+.mois-lbl {
+  font-size: .64rem; font-weight: 600; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--muted); text-align: center;
+}
 
 /* ── Footer ──────────────────────────────────────────────── */
 footer {
