@@ -362,6 +362,165 @@ function renteMaxPourDuree(p, annees) {
   return lo;
 }
 
+/* ── Simulation Monte Carlo ──────────────────────────────────
+   Au lieu d'un rendement fixe, on tire des trajectoires aléatoires :
+   rendement log-normal mensuel calibré pour que l'ESPÉRANCE de croissance
+   égale le taux déterministe (la médiane, elle, est plus basse — c'est
+   le coût de la volatilité). Frais TER déduits annuellement comme dans
+   compute(). Les phases/overrides/versements ponctuels sont ignorés :
+   la simulation porte sur le plan « régulier » (apport + mensuel + aug). */
+
+function _gaussienne() {
+  /* Box-Muller (méthode polaire), sans état module : appelée par paires. */
+  let u, v, s;
+  do {
+    u = Math.random() * 2 - 1;
+    v = Math.random() * 2 - 1;
+    s = u * u + v * v;
+  } while (!s || s >= 1);
+  return u * Math.sqrt(-2 * Math.log(s) / s);
+}
+
+/**
+ * @param {Object} p    - Paramètres globaux (mensuel, taux, duree, apport, frais, aug)
+ * @param {Object} opts - { vol = 15 (%/an), runs = 1000, objectif = null (€) }
+ * @returns {Object} { yrs, p10, p50, p90, verséL,
+ *                     medianeFinale, p10Final, p90Final, verséTotal,
+ *                     probPerte, probObjectif, runs, vol }
+ */
+function computeMonteCarlo(p, opts = {}) {
+  const runs   = Math.max(100, Math.min(5000, opts.runs || 1000));
+  const vol    = (opts.vol != null ? opts.vol : 15) / 100;
+  const muM    = Math.log(1 + p.taux / 100) / 12;
+  const sigM   = vol / Math.sqrt(12);
+  const driftM = muM - sigM * sigM / 2;   // log-normale : E[exp(·)] = (1+taux)^(1/12)
+  const fraisR = p.frais / 100;
+  const augR   = p.aug / 100;
+
+  const parAnnee = Array.from({ length: p.duree }, () => new Float64Array(runs));
+  const verséL   = [];
+
+  for (let r = 0; r < runs; r++) {
+    let cap = p.apport;
+    for (let an = 1; an <= p.duree; an++) {
+      const mensuel = p.mensuel * Math.pow(1 + augR, an - 1);
+      for (let m = 0; m < 12; m++) {
+        cap = (cap + mensuel) * Math.exp(driftM + sigM * _gaussienne());
+      }
+      cap -= cap * fraisR;
+      parAnnee[an - 1][r] = cap;
+    }
+  }
+
+  /* Versements cumulés (identiques pour toutes les trajectoires) */
+  let versé = p.apport;
+  for (let an = 1; an <= p.duree; an++) {
+    versé += 12 * p.mensuel * Math.pow(1 + augR, an - 1);
+    verséL.push(versé);
+  }
+
+  const pct = (sorted, q) =>
+    sorted[Math.min(sorted.length - 1, Math.floor(q * sorted.length))];
+
+  const yrs = [], p10 = [], p50 = [], p90 = [];
+  for (let i = 0; i < p.duree; i++) {
+    const s = parAnnee[i].slice().sort();
+    yrs.push(i + 1);
+    p10.push(pct(s, 0.10));
+    p50.push(pct(s, 0.50));
+    p90.push(pct(s, 0.90));
+  }
+
+  const finals = parAnnee[p.duree - 1];
+  let nbPerte = 0, nbObjectif = 0;
+  for (let r = 0; r < runs; r++) {
+    if (finals[r] < versé) nbPerte++;
+    if (opts.objectif > 0 && finals[r] >= opts.objectif) nbObjectif++;
+  }
+
+  return {
+    yrs, p10, p50, p90, verséL,
+    medianeFinale: p50[p50.length - 1],
+    p10Final:      p10[p10.length - 1],
+    p90Final:      p90[p90.length - 1],
+    verséTotal:    versé,
+    probPerte:     nbPerte / runs,
+    probObjectif:  opts.objectif > 0 ? nbObjectif / runs : null,
+    runs, vol: vol * 100,
+  };
+}
+
+/* ── Backtest sur séquences historiques ──────────────────────
+   Rendements annuels APPROXIMATIFS du MSCI World (USD, dividendes bruts
+   réinvestis), arrondis — à titre pédagogique : l'ordre de grandeur et
+   la chronologie des crises comptent plus que la décimale. */
+
+const HISTO_MSCI_WORLD = [
+  { annee: 1970, taux: -2 },  { annee: 1971, taux: 18 },  { annee: 1972, taux: 22 },
+  { annee: 1973, taux: -15 }, { annee: 1974, taux: -25 }, { annee: 1975, taux: 32 },
+  { annee: 1976, taux: 13 },  { annee: 1977, taux: 0 },   { annee: 1978, taux: 16 },
+  { annee: 1979, taux: 11 },  { annee: 1980, taux: 25 },  { annee: 1981, taux: -5 },
+  { annee: 1982, taux: 9 },   { annee: 1983, taux: 22 },  { annee: 1984, taux: 4 },
+  { annee: 1985, taux: 40 },  { annee: 1986, taux: 41 },  { annee: 1987, taux: 16 },
+  { annee: 1988, taux: 23 },  { annee: 1989, taux: 16 },  { annee: 1990, taux: -17 },
+  { annee: 1991, taux: 18 },  { annee: 1992, taux: -5 },  { annee: 1993, taux: 22 },
+  { annee: 1994, taux: 5 },   { annee: 1995, taux: 20 },  { annee: 1996, taux: 13 },
+  { annee: 1997, taux: 15 },  { annee: 1998, taux: 24 },  { annee: 1999, taux: 25 },
+  { annee: 2000, taux: -13 }, { annee: 2001, taux: -17 }, { annee: 2002, taux: -20 },
+  { annee: 2003, taux: 33 },  { annee: 2004, taux: 15 },  { annee: 2005, taux: 9 },
+  { annee: 2006, taux: 20 },  { annee: 2007, taux: 9 },   { annee: 2008, taux: -40 },
+  { annee: 2009, taux: 30 },  { annee: 2010, taux: 12 },  { annee: 2011, taux: -5 },
+  { annee: 2012, taux: 15 },  { annee: 2013, taux: 27 },  { annee: 2014, taux: 5 },
+  { annee: 2015, taux: -1 },  { annee: 2016, taux: 8 },   { annee: 2017, taux: 22 },
+  { annee: 2018, taux: -9 },  { annee: 2019, taux: 28 },  { annee: 2020, taux: 16 },
+  { annee: 2021, taux: 22 },  { annee: 2022, taux: -18 }, { annee: 2023, taux: 24 },
+  { annee: 2024, taux: 18 },
+];
+
+/**
+ * Applique la séquence réelle des rendements à partir d'une année de départ
+ * au plan d'épargne courant (apport + mensuel + aug + frais).
+ * @returns {Object|null} { yrs, totL, tauxL, verséL, duree, final, versé,
+ *                          anneeDebut, anneeFin, tronque, cagr, pireAnnee }
+ */
+function computeBacktest(p, anneeDepart) {
+  const dispo = HISTO_MSCI_WORLD.filter(h => h.annee >= anneeDepart);
+  const duree = Math.min(p.duree, dispo.length);
+  if (!duree) return null;
+
+  const fraisR = p.frais / 100;
+  const augR   = p.aug / 100;
+
+  let cap = p.apport, versé = p.apport;
+  const yrs = [], totL = [], tauxL = [], verséL = [];
+
+  for (let an = 1; an <= duree; an++) {
+    const taux = dispo[an - 1].taux;
+    const tM   = tauxMensuel(taux);
+    const mensuel = p.mensuel * Math.pow(1 + augR, an - 1);
+    for (let m = 0; m < 12; m++) {
+      cap = (cap + mensuel) * (1 + tM);
+      versé += mensuel;
+    }
+    cap -= cap * fraisR;
+    yrs.push(an); totL.push(cap); tauxL.push(taux); verséL.push(versé);
+  }
+
+  const pire = dispo.slice(0, duree)
+    .reduce((a, b) => (b.taux < a.taux ? b : a));
+
+  return {
+    yrs, totL, tauxL, verséL, duree,
+    final:      cap,
+    versé,
+    anneeDebut: anneeDepart,
+    anneeFin:   dispo[duree - 1].annee,
+    tronque:    duree < p.duree,
+    cagr:       versé > 0 && duree > 0 ? (Math.pow(cap / versé, 1 / duree) - 1) * 100 : null,
+    pireAnnee:  pire,
+  };
+}
+
 /* ── Comparaison fiscale ─────────────────────────────────── */
 
 /**

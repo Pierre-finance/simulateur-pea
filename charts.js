@@ -316,6 +316,104 @@ function updateRenteChart(res) {
   chartRente.update();
 }
 
+/* ── Graphique 4 : éventail Monte Carlo ──────────────────── */
+
+let chartMC = null;
+
+/**
+ * Met à jour (et crée au premier appel) l'éventail Monte Carlo :
+ * bande p10→p90, médiane, et scénario déterministe en référence.
+ * @param {Object|null} res  - Résultat de computeMonteCarlo(), ou null pour vider
+ * @param {Array}       totL - Courbe déterministe (compute().totL) en référence
+ */
+function updateMCChart(res, totL = []) {
+  const el = document.getElementById('chartMC');
+  if (!el) return;
+  if (!res) {
+    if (chartMC) {
+      chartMC.data.labels = [];
+      chartMC.data.datasets.forEach(ds => { ds.data = []; });
+      chartMC.update();
+    }
+    return;
+  }
+
+  if (!chartMC) {
+    chartMC = new Chart(el, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Optimiste (90 %)',
+            data: [], borderColor: 'rgba(63,185,80,.75)', backgroundColor: 'transparent',
+            fill: false, tension: .35, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4,
+          },
+          {
+            label: 'Pessimiste (10 %)',
+            data: [], borderColor: 'rgba(248,81,73,.75)', backgroundColor: 'rgba(88,166,255,.09)',
+            fill: '-1', tension: .35, borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 4,
+          },
+          {
+            label: 'Médiane (50 %)',
+            data: [], borderColor: '#58a6ff', backgroundColor: 'transparent',
+            fill: false, tension: .35, borderWidth: 2.5, pointRadius: 0, pointHoverRadius: 4,
+          },
+          {
+            label: 'Scénario déterministe',
+            data: [], borderColor: 'rgba(139,148,158,.6)', backgroundColor: 'transparent',
+            fill: false, tension: .35, borderWidth: 1.5, borderDash: [4, 4],
+            pointRadius: 0, pointHoverRadius: 4,
+          },
+          {
+            label: 'Total versé',
+            data: [], borderColor: 'rgba(210,153,34,.55)', backgroundColor: 'transparent',
+            fill: false, tension: 0, borderWidth: 1.2, borderDash: [2, 4],
+            pointRadius: 0, pointHoverRadius: 4,
+          },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        animation: { duration: 200 },
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            position: 'bottom',
+            labels: { boxWidth: 22, padding: 12, usePointStyle: true, pointStyleWidth: 18 },
+          },
+          tooltip: {
+            ...TT,
+            callbacks: {
+              label: ctx => ctx.parsed.y == null ? null
+                : ` ${ctx.dataset.label} : ${fmt(ctx.parsed.y)}`,
+            },
+          },
+        },
+        scales: {
+          x: { grid: { color: 'rgba(33,38,45,.8)' }, ticks: { maxTicksLimit: 10 } },
+          y: {
+            grid: { color: 'rgba(33,38,45,.8)' },
+            ticks: {
+              callback: v =>
+                v >= 1e6 ? `${(v / 1e6).toFixed(1)}M €` :
+                v >= 1e3 ? `${(v / 1e3).toFixed(0)}k €` : `${v} €`,
+            },
+          },
+        },
+      },
+    });
+  }
+
+  chartMC.data.labels           = res.yrs.map(y => `An ${y}`);
+  chartMC.data.datasets[0].data = res.p90;
+  chartMC.data.datasets[1].data = res.p10;
+  chartMC.data.datasets[2].data = res.p50;
+  chartMC.data.datasets[3].data = totL.slice(0, res.yrs.length);
+  chartMC.data.datasets[4].data = res.verséL;
+  chartMC.update();
+}
+
 /**
  * Met à jour les deux graphiques avec les nouvelles données de simulation.
  * @param {Object}      data     - Résultat de compute() avec phases actives

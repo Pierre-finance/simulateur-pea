@@ -29,6 +29,8 @@ const LS_PHASES    = 'pea_phases';
 const LS_OVERRIDES = 'pea_overrides';
 const LS_SCENARIOS = 'pea_scenarios';
 const LS_RENTE     = 'pea_rente';
+const LS_MC        = 'pea_mc';
+const LS_BT        = 'pea_bt';
 const MAX_SCENARIOS = 20;
 
 /* ── Tableau enrichi ─────────────────────────────────────── */
@@ -137,6 +139,15 @@ function getRenteOpts() {
   };
 }
 
+function getMCOpts() {
+  return {
+    enabled:  document.getElementById('cb-mc').checked,
+    vol:      +document.getElementById('n-vol-mc').value,
+    runs:     +document.getElementById('n-runs-mc').value,
+    objectif: +document.getElementById('n-objectif-mc').value,
+  };
+}
+
 /* ── Mise à jour immédiate des ctrl-values ───────────────── */
 function updateCtrlValues() {
   const p = getParams();
@@ -194,6 +205,9 @@ function saveParams() {
     localStorage.setItem(LS_PHASES, JSON.stringify(phases));
     localStorage.setItem(LS_OVERRIDES, JSON.stringify(overrides));
     localStorage.setItem(LS_RENTE, JSON.stringify(getRenteOpts()));
+    localStorage.setItem(LS_MC, JSON.stringify(getMCOpts()));
+    const btSel = document.getElementById('bt-annee');
+    if (btSel && btSel.value) localStorage.setItem(LS_BT, btSel.value);
   } catch (_) {}
 }
 
@@ -246,6 +260,21 @@ function loadParams() {
     if (ov && typeof ov === 'object' && !Array.isArray(ov)) overrides = ov;
 
     applyRenteOpts(JSON.parse(localStorage.getItem(LS_RENTE)));
+
+    const mc = JSON.parse(localStorage.getItem(LS_MC));
+    if (mc && typeof mc === 'object') {
+      document.getElementById('cb-mc').checked = !!mc.enabled;
+      if (mc.vol      != null) document.getElementById('n-vol-mc').value      = mc.vol;
+      if (mc.runs)             document.getElementById('n-runs-mc').value     = mc.runs;
+      if (mc.objectif != null) document.getElementById('n-objectif-mc').value = mc.objectif;
+      document.getElementById('mc-params').className =
+        mc.enabled ? 'aude-params-visible' : 'aude-params-hidden';
+    }
+
+    const bt = localStorage.getItem(LS_BT);
+    if (bt && document.querySelector(`#bt-annee option[value="${bt}"]`)) {
+      document.getElementById('bt-annee').value = bt;
+    }
   } catch (_) {}
 }
 
@@ -523,6 +552,116 @@ function renderRente(d, p) {
     </div>`;
 
   updateRenteChart(r);
+}
+
+/* ── Monte Carlo ─────────────────────────────────────────── */
+function renderMC(p, refTotL) {
+  const o      = getMCOpts();
+  const badge  = document.getElementById('mc-badge');
+  const resDiv = document.getElementById('mc-results');
+  document.getElementById('mc-params').className =
+    o.enabled ? 'aude-params-visible' : 'aude-params-hidden';
+
+  if (!o.enabled || p.duree < 1) {
+    badge.textContent = ''; badge.classList.remove('show');
+    resDiv.innerHTML = '';
+    updateMCChart(null);
+    return;
+  }
+
+  const mc = computeMonteCarlo(p, { vol: o.vol, runs: o.runs, objectif: o.objectif });
+
+  badge.textContent = `±${Math.round(o.vol)} %`;
+  badge.classList.add('show');
+
+  const pPerte = Math.round(mc.probPerte * 100);
+  const objectifHtml = mc.probObjectif != null ? `
+      <div class="kpi purple">
+        <div class="kpi-label">Objectif ${fmt(o.objectif)}</div>
+        <div class="kpi-value">${Math.round(mc.probObjectif * 100)} %</div>
+        <div class="kpi-sub">des trajectoires l'atteignent en ${p.duree} ans</div>
+      </div>` : '';
+
+  resDiv.innerHTML = `
+    <div class="kpi-grid" style="margin-top:1.1rem">
+      <div class="kpi blue">
+        <div class="kpi-label">Médiane à terme</div>
+        <div class="kpi-value">${fmt(mc.medianeFinale)}</div>
+        <div class="kpi-sub">1 trajectoire sur 2 fait mieux</div>
+      </div>
+      <div class="kpi teal">
+        <div class="kpi-label">Fourchette probable</div>
+        <div class="kpi-value" style="font-size:1.05rem">${fmt(mc.p10Final)} – ${fmt(mc.p90Final)}</div>
+        <div class="kpi-sub">80 % des cas entre ces bornes</div>
+      </div>
+      ${objectifHtml}
+      <div class="kpi ${pPerte > 15 ? 'red' : 'gold'}">
+        <div class="kpi-label">Risque de moins-value</div>
+        <div class="kpi-value">${pPerte} %</div>
+        <div class="kpi-sub">finir sous les ${fmt(mc.verséTotal)} versés</div>
+      </div>
+    </div>`;
+
+  updateMCChart(mc, refTotL);
+}
+
+/* ── Backtest historique ─────────────────────────────────── */
+let _btLigneTracee = false;
+
+function renderBacktest(p, dRef) {
+  const sel    = document.getElementById('bt-annee');
+  const badge  = document.getElementById('bt-badge');
+  const resDiv = document.getElementById('bt-results');
+  if (!sel || !sel.options.length) return;
+
+  const annee = +sel.value;
+  const bt    = computeBacktest(p, annee);
+  if (!bt) {
+    badge.textContent = ''; badge.classList.remove('show');
+    resDiv.innerHTML = '';
+    return;
+  }
+
+  badge.textContent = `${bt.anneeDebut} → ${bt.anneeFin}`;
+  badge.classList.add('show');
+
+  /* Comparaison au plan déterministe, au même horizon */
+  const refFinal = dRef.totL[bt.duree - 1] != null ? dRef.totL[bt.duree - 1] : dRef.final;
+  const ecart    = bt.final - refFinal;
+
+  resDiv.innerHTML = `
+    <div class="kpi-grid" style="margin-top:1.1rem">
+      <div class="kpi ${ecart >= 0 ? 'green' : 'red'}">
+        <div class="kpi-label">Capital obtenu</div>
+        <div class="kpi-value">${fmt(bt.final)}</div>
+        <div class="kpi-sub">${bt.duree} ans de marchés réels (${bt.anneeDebut}–${bt.anneeFin})</div>
+      </div>
+      <div class="kpi blue">
+        <div class="kpi-label">Écart vs ton plan à ${p.taux} %</div>
+        <div class="kpi-value">${ecart >= 0 ? '+' : '−'}${fmtAbs(ecart)}</div>
+        <div class="kpi-sub">au même horizon de ${bt.duree} ans</div>
+      </div>
+      <div class="kpi teal">
+        <div class="kpi-label">Rendement annualisé</div>
+        <div class="kpi-value">${bt.cagr != null ? bt.cagr.toFixed(1).replace('.', ',') + ' %' : '—'}</div>
+        <div class="kpi-sub">multiple annualisé de la mise (${fmt(bt.versé)})</div>
+      </div>
+      <div class="kpi gold">
+        <div class="kpi-label">Pire année traversée</div>
+        <div class="kpi-value">${bt.pireAnnee.taux} %</div>
+        <div class="kpi-sub">en ${bt.pireAnnee.annee}</div>
+      </div>
+    </div>
+    ${bt.tronque ? `<p class="annees-hint" style="margin-top:.7rem">Données historiques
+      jusqu'en ${HISTO_MSCI_WORLD[HISTO_MSCI_WORLD.length - 1].annee} : backtest limité à
+      ${bt.duree} ans sur les ${p.duree} ans du plan.</p>` : ''}
+    <div style="display:flex; gap:.5rem; flex-wrap:wrap; margin-top:.9rem">
+      <button class="preset-btn" data-action="bt-trace">📈 Tracer sur « Évolution du capital »</button>
+      ${_btLigneTracee ? '<button class="preset-btn" data-action="bt-clear">✕ Retirer la courbe</button>' : ''}
+    </div>`;
+
+  /* Si la courbe est déjà tracée, la tenir à jour avec les nouveaux paramètres */
+  if (_btLigneTracee) addComparisonLine(bt.totL, bt.yrs, `Backtest ${bt.anneeDebut}`);
 }
 
 /* ── Utilitaire XSS ──────────────────────────────────────── */
@@ -1422,6 +1561,10 @@ function computeAndRender() {
   /* Phase de rente */
   renderRente(d, p);
 
+  /* Monte Carlo & backtest — référence : le plan sans personnalisation */
+  renderMC(p, (dBase || d).totL);
+  renderBacktest(p, dBase || d);
+
   /* KPI — phases de vie */
   const nbPhSub    = document.getElementById('kpi-nb-phases-sub');
   const nbPhEl     = document.getElementById('kpi-nb-phases');
@@ -1603,6 +1746,40 @@ function init() {
   document.getElementById('n-rente').addEventListener('change',      computeAndRender);
   document.getElementById('n-taux-rente').addEventListener('change', computeAndRender);
 
+  /* Monte Carlo : activation + paramètres */
+  document.getElementById('cb-mc').addEventListener('change', () => {
+    document.getElementById('mc-params').className =
+      document.getElementById('cb-mc').checked ? 'aude-params-visible' : 'aude-params-hidden';
+    computeAndRender();
+  });
+  document.getElementById('n-runs-mc').addEventListener('change', computeAndRender);
+  ['n-vol-mc', 'n-objectif-mc'].forEach(id => {
+    document.getElementById(id).addEventListener('input',  debouncedRender);
+    document.getElementById(id).addEventListener('change', computeAndRender);
+  });
+
+  /* Backtest : années disponibles + départs célèbres + tracé */
+  const btSel = document.getElementById('bt-annee');
+  btSel.innerHTML = HISTO_MSCI_WORLD.map(h =>
+    `<option value="${h.annee}">${h.annee}</option>`).join('');
+  btSel.value = '2000';
+  btSel.addEventListener('change', computeAndRender);
+  document.querySelectorAll('.bt-preset').forEach(b =>
+    b.addEventListener('click', () => { btSel.value = b.dataset.annee; computeAndRender(); }));
+  document.getElementById('bt-results').addEventListener('click', e => {
+    const btn = e.target.closest('[data-action]');
+    if (!btn) return;
+    if (btn.dataset.action === 'bt-trace') {
+      _btLigneTracee = true;
+      computeAndRender();
+      document.querySelector('.charts-grid')?.scrollIntoView({ behavior: 'smooth' });
+    } else if (btn.dataset.action === 'bt-clear') {
+      _btLigneTracee = false;
+      removeComparisonLine();
+      computeAndRender();
+    }
+  });
+
   /* Versements ponctuels */
   document.getElementById('vp-list').addEventListener('change', e => {
     const row = e.target.closest('[data-id]'); if (!row) return;
@@ -1645,6 +1822,9 @@ function init() {
     document.getElementById('aude-params').className = 'aude-params-hidden';
     document.getElementById('cb-rente').checked  = false;
     document.getElementById('rente-params').className = 'aude-params-hidden';
+    document.getElementById('cb-mc').checked = false;
+    document.getElementById('mc-params').className = 'aude-params-hidden';
+    if (_btLigneTracee) { _btLigneTracee = false; removeComparisonLine(); }
     vps = []; renderVP();
     phases = []; editingPhaseId = null;
     overrides = {}; expandedYears.clear();
