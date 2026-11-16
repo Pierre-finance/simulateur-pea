@@ -1,92 +1,112 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="fr" data-brique="simulateur">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Simulateur PEA – Planification patrimoniale</title>
+  <meta name="description" content="Simulateur de Plan d'Épargne en Actions : intérêts composés, inflation, frais, fiscalité 2026, plafond, phases de vie, rente, Monte Carlo et backtest historique." />
+  <!-- ../common.* : socle de l'écosystème local (navigation, notifications).
+       Publié seul sur GitHub Pages, ces deux fichiers renvoient 404 — c'est
+       attendu : styles.css est complet à lui seul et la page s'en passe. -->
+  <link rel="stylesheet" href="../common.css" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="../common.js"></script>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
   <link rel="manifest" href="../manifest.json">
   <meta name="theme-color" content="#0d1117">
-  <link rel="icon" href="../icons/icon-192.png" type="image/png">
+  <!-- L'icône est une copie locale : elle s'affiche aussi quand la page est publiée seule -->
+  <link rel="icon" href="icon-192.png" type="image/png">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <link rel="apple-touch-icon" href="../icons/icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
-<div class="container">
 
-  <!-- Navigation écosystème — masquée quand le simulateur est publié seul
-       (GitHub Pages) : les autres briques n'existent que dans l'écosystème local -->
-  <nav class="app-switch" id="nav-ecosysteme">
-    <a href="../index.html">🏠 Accueil</a>
-    <span class="current">📈 Simulateur</span>
-    <a href="../tracker/index.html">📊 Tracker</a>
-    <a href="../actualites/index.html">📰 Actualités</a>
-    <a href="../entreprises/index.html">🏢 Entreprises</a>
-    <a href="../investir/index.html">💡 Où investir ?</a>
-  </nav>
+  <!-- Navigation de l'écosystème — absente quand le simulateur est publié
+       seul : les autres briques n'existent que dans l'application locale. -->
+  <nav class="app-switch" id="nav-ecosysteme" data-current="simulateur"></nav>
   <script>
-    /* Publié seul (GitHub Pages) : sans hub ni tracker, on masque la
-       navigation et le bouton « Partir de mon PEA réel » plus bas. */
-    var PUBLIE_SEUL = location.hostname.endsWith('github.io');
-    if (PUBLIE_SEUL)
-      document.getElementById('nav-ecosysteme').style.display = 'none';
+    /* Publié seul (GitHub Pages, ou common.js introuvable) : ni navigation,
+       ni bouton « Partir de mon PEA réel » (voir plus bas). */
+    var PUBLIE_SEUL = location.hostname.endsWith('github.io') || typeof peaRenderNav !== 'function';
+    if (PUBLIE_SEUL) document.getElementById('nav-ecosysteme').remove();
+    else peaRenderNav(document.getElementById('nav-ecosysteme'));
   </script>
 
-  <!-- Header -->
-  <header>
-    <div class="badge">Plan d'Épargne en Actions</div>
-    <h1>Simulateur PEA<br>Planification patrimoniale</h1>
-    <p id="header-sub">Projection sur 20 ans avec intérêts composés mensuels</p>
+  <!-- ── En-tête ─────────────────────────────────────── -->
+  <header class="page-head">
+    <div class="page-head-in">
+      <div class="page-ident">
+        <span class="page-ico" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 17.5 9 11l4 4 8-9"/><path d="M15 6h6v6"/></svg>
+        </span>
+        <div>
+          <span class="badge">Plan d'Épargne en Actions</span>
+          <h1>Simulateur PEA</h1>
+          <p id="header-sub">Projection sur 20 ans avec intérêts composés mensuels</p>
+        </div>
+      </div>
+      <div class="page-actions">
+        <button class="btn-reset" id="btn-reset" title="Revenir aux paramètres par défaut">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
+            <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
+          </svg>
+          Réinitialiser
+        </button>
+      </div>
+    </div>
   </header>
 
-  <!-- Presets + Scénarios -->
+<main class="container">
+
+  <!-- Profils + scénarios pédagogiques -->
   <div class="presets-strip">
-    <span class="presets-lbl">Profils :</span>
+    <span class="presets-lbl">Profils</span>
     <button class="preset-btn" data-preset="conservateur">Conservateur — 100 €/mois · 4 %</button>
     <button class="preset-btn" data-preset="equilibre">Équilibré — 200 €/mois · 7 %</button>
     <button class="preset-btn" data-preset="ambitieux">Ambitieux — 500 €/mois · 8 %</button>
     <button class="preset-btn" id="btn-pea-reel"
-            title="Reprend la valeur actuelle et le rythme de versement de ton tracker (même navigateur)">
+            title="Reprend la valeur actuelle et le rythme de versement du tracker (même navigateur)">
       📊 Partir de mon PEA réel</button>
     <script>
-      if (PUBLIE_SEUL) document.getElementById('btn-pea-reel').style.display = 'none';
+      if (PUBLIE_SEUL) document.getElementById('btn-pea-reel').remove();
     </script>
     <span class="presets-sep"></span>
     <div class="scenario-wrap" id="scenario-wrap">
-      <button class="scenario-btn" id="btn-scenario">Scénarios ▾</button>
+      <button class="scenario-btn" id="btn-scenario" aria-haspopup="true" aria-expanded="false">Scénarios ▾</button>
       <div class="scenario-menu" id="scenario-menu">
-        <div class="scenario-item" data-key="crash2008">
-          <div class="scenario-title">📉 Krach boursier</div>
-          <div class="scenario-desc">Crise −40 % une année, rebond +25 % l'année suivante</div>
-        </div>
-        <div class="scenario-item" data-key="decennie">
-          <div class="scenario-title">😴 Décennie perdue</div>
-          <div class="scenario-desc">10 ans à ~1 %/an, puis reprise à la normale</div>
-        </div>
-        <div class="scenario-item" data-key="inflation">
-          <div class="scenario-title">🔥 Crise inflationniste</div>
-          <div class="scenario-desc">3 ans de marchés sous pression (~2 %/an)</div>
-        </div>
-        <div class="scenario-item" data-key="carriere">
-          <div class="scenario-title">👶 Carrière en U</div>
-          <div class="scenario-desc">Versements hauts, baisse milieu (enfants), remontée</div>
-        </div>
-        <div class="scenario-item" data-key="bull">
-          <div class="scenario-title">🚀 Bull market exceptionnel</div>
-          <div class="scenario-desc">5 ans euphoriques (12 %/an), puis normalisation</div>
-        </div>
+        <button type="button" class="scenario-item" data-key="crash2008">
+          <span class="scenario-title">📉 Krach boursier</span>
+          <span class="scenario-desc">Crise −40 % une année, rebond +25 % l'année suivante</span>
+        </button>
+        <button type="button" class="scenario-item" data-key="decennie">
+          <span class="scenario-title">😴 Décennie perdue</span>
+          <span class="scenario-desc">10 ans à ~1 %/an, puis reprise à la normale</span>
+        </button>
+        <button type="button" class="scenario-item" data-key="inflation">
+          <span class="scenario-title">🔥 Crise inflationniste</span>
+          <span class="scenario-desc">3 ans de marchés sous pression (~2 %/an)</span>
+        </button>
+        <button type="button" class="scenario-item" data-key="carriere">
+          <span class="scenario-title">👶 Carrière en U</span>
+          <span class="scenario-desc">Versements hauts, baisse au milieu (enfants), remontée</span>
+        </button>
+        <button type="button" class="scenario-item" data-key="bull">
+          <span class="scenario-title">🚀 Bull market exceptionnel</span>
+          <span class="scenario-desc">5 ans euphoriques (12 %/an), puis normalisation</span>
+        </button>
         <div class="scenario-divider"></div>
-        <button class="scenario-reset" id="btn-scenario-reset">Réinitialiser les phases</button>
+        <button type="button" class="scenario-reset" id="btn-scenario-reset">Réinitialiser les phases</button>
       </div>
     </div>
   </div>
 
-  <!-- Feedback « Partir de mon PEA réel » -->
-  <div id="pea-reel-note" class="scenario-explain"
-       style="display:none; max-width: 1080px; margin: 0 auto .85rem; padding-left: .9rem; padding-right: .9rem;"></div>
+  <!-- Retour de « Partir de mon PEA réel » -->
+  <div id="pea-reel-note" class="scenario-explain" style="display:none;"></div>
 
-  <!-- Controls – bloc 1 : 4 paramètres principaux -->
+  <!-- ── Paramètres principaux ───────────────────────── -->
   <div class="controls-section">
     <div class="controls-grid">
 
@@ -95,15 +115,16 @@
           Versement mensuel
           <span class="tt-anchor">
             <button class="tt-btn" type="button" aria-label="Aide">?</button>
-            <div class="tt-box">Le montant que vous versez chaque mois sur votre PEA.</div>
+            <span class="tt-box">Le montant que vous versez chaque mois sur votre PEA.</span>
           </span>
         </span>
         <div class="ctrl-value-row">
-          <span class="ctrl-value blue" id="cv-mensuel">200 €</span>
-          <input class="ctrl-num" type="number" id="n-mensuel" min="50" max="2000" step="10" value="200">
+          <span class="ctrl-value" id="cv-mensuel">200 €</span>
+          <input class="ctrl-num" type="number" id="n-mensuel" min="50" max="2000" step="10" value="200" inputmode="numeric" aria-label="Versement mensuel en euros">
         </div>
-        <input type="range" id="s-mensuel" min="50" max="2000" step="10" value="200">
+        <input type="range" id="s-mensuel" min="50" max="2000" step="10" value="200" aria-label="Versement mensuel">
         <div class="ctrl-minmax"><span>50 €</span><span>2 000 €</span></div>
+        <div class="ctrl-net-hint" id="mensuel-hint"></div>
       </div>
 
       <div class="ctrl-card">
@@ -111,16 +132,16 @@
           Rendement annuel brut
           <span class="tt-anchor">
             <button class="tt-btn" type="button" aria-label="Aide">?</button>
-            <div class="tt-box">Performance annuelle attendue de l'ETF. Le MSCI World a rapporté ~7 % / an sur 30 ans.</div>
+            <span class="tt-box">Performance annuelle attendue de l'ETF. Le MSCI World a rapporté environ 7 % par an sur 30 ans.</span>
           </span>
         </span>
         <div class="ctrl-value-row">
-          <span class="ctrl-value gold" id="cv-taux">7 %</span>
-          <input class="ctrl-num" type="number" id="n-taux" min="0" max="20" step="0.1" value="7">
+          <span class="ctrl-value" id="cv-taux">7 %</span>
+          <input class="ctrl-num" type="number" id="n-taux" min="0" max="20" step="0.1" value="7" inputmode="decimal" aria-label="Rendement annuel brut en pourcentage">
         </div>
-        <input type="range" id="s-taux" min="0" max="20" step="0.1" value="7">
+        <input type="range" id="s-taux" min="0" max="20" step="0.1" value="7" aria-label="Rendement annuel brut">
         <div class="ctrl-minmax"><span>0 %</span><span>20 %</span></div>
-        <div class="ctrl-net-hint" id="taux-net-hint"></div>
+        <div class="ctrl-net-hint duo" id="taux-net-hint"></div>
       </div>
 
       <div class="ctrl-card">
@@ -128,15 +149,16 @@
           Durée
           <span class="tt-anchor">
             <button class="tt-btn" type="button" aria-label="Aide">?</button>
-            <div class="tt-box">Durée totale du placement. Les intérêts composés décuplent l'effet sur le long terme.</div>
+            <span class="tt-box">Durée totale du placement. Les intérêts composés décuplent l'effet sur le long terme.</span>
           </span>
         </span>
         <div class="ctrl-value-row">
-          <span class="ctrl-value green" id="cv-duree">20 ans</span>
-          <input class="ctrl-num" type="number" id="n-duree" min="1" max="40" step="1" value="20">
+          <span class="ctrl-value" id="cv-duree">20 ans</span>
+          <input class="ctrl-num" type="number" id="n-duree" min="1" max="40" step="1" value="20" inputmode="numeric" aria-label="Durée en années">
         </div>
-        <input type="range" id="s-duree" min="1" max="40" step="1" value="20">
+        <input type="range" id="s-duree" min="1" max="40" step="1" value="20" aria-label="Durée">
         <div class="ctrl-minmax"><span>1 an</span><span>40 ans</span></div>
+        <div class="ctrl-net-hint" id="duree-hint"></div>
       </div>
 
       <div class="ctrl-card">
@@ -144,22 +166,21 @@
           Apport initial
           <span class="tt-anchor">
             <button class="tt-btn" type="button" aria-label="Aide">?</button>
-            <div class="tt-box">Capital investi dès l'ouverture du PEA. Profite immédiatement des intérêts composés.</div>
+            <span class="tt-box">Capital investi dès l'ouverture du PEA. Il profite immédiatement des intérêts composés.</span>
           </span>
         </span>
         <div class="ctrl-value-row">
-          <span class="ctrl-value purple" id="cv-apport">0 €</span>
-          <input class="ctrl-num" type="number" id="n-apport" min="0" max="50000" step="100" value="0">
+          <span class="ctrl-value" id="cv-apport">0 €</span>
+          <input class="ctrl-num" type="number" id="n-apport" min="0" max="50000" step="100" value="0" inputmode="numeric" aria-label="Apport initial en euros">
         </div>
-        <input type="range" id="s-apport" min="0" max="50000" step="100" value="0">
+        <input type="range" id="s-apport" min="0" max="50000" step="100" value="0" aria-label="Apport initial">
         <div class="ctrl-minmax"><span>0 €</span><span>50 000 €</span></div>
+        <div class="ctrl-net-hint" id="apport-hint"></div>
       </div>
 
     </div>
 
-    <div class="controls-sep"></div>
-
-    <!-- Controls – bloc 2 : paramètres avancés -->
+    <!-- Paramètres avancés -->
     <div class="controls-grid">
 
       <div class="ctrl-card">
@@ -167,104 +188,147 @@
           Inflation annuelle
           <span class="tt-anchor">
             <button class="tt-btn" type="button" aria-label="Aide">?</button>
-            <div class="tt-box">L'inflation réduit le pouvoir d'achat. La BCE vise 2 % / an. Utilisée pour la valeur réelle.</div>
+            <span class="tt-box">L'inflation réduit le pouvoir d'achat. La BCE vise 2 % par an. Sert à calculer la valeur réelle.</span>
           </span>
         </span>
         <div class="ctrl-value-row">
-          <span class="ctrl-value teal" id="cv-inflation">2 %</span>
-          <input class="ctrl-num" type="number" id="n-inflation" min="0" max="5" step="0.1" value="2">
+          <span class="ctrl-value" id="cv-inflation">2 %</span>
+          <input class="ctrl-num" type="number" id="n-inflation" min="0" max="5" step="0.1" value="2" inputmode="decimal" aria-label="Inflation annuelle en pourcentage">
         </div>
-        <input type="range" id="s-inflation" min="0" max="5" step="0.1" value="2">
+        <input type="range" id="s-inflation" min="0" max="5" step="0.1" value="2" aria-label="Inflation annuelle">
         <div class="ctrl-minmax"><span>0 %</span><span>5 %</span></div>
       </div>
 
       <div class="ctrl-card">
         <span class="ctrl-label">
-          Frais annuels ETF (TER)
+          Frais annuels de l'ETF (TER)
           <span class="tt-anchor">
             <button class="tt-btn" type="button" aria-label="Aide">?</button>
-            <div class="tt-box">TER du fonds (Total Expense Ratio). Le WPEA (Amundi) affiche 0.25 %. Déduits chaque année sur le capital.</div>
+            <span class="tt-box">Frais de gestion du fonds (Total Expense Ratio) : 0,20 à 0,40 % par an pour un ETF MSCI World éligible au PEA. Déduits chaque année du capital.</span>
           </span>
         </span>
         <div class="ctrl-value-row">
-          <span class="ctrl-value red" id="cv-frais">0.25 %</span>
-          <input class="ctrl-num" type="number" id="n-frais" min="0" max="1" step="0.05" value="0.25">
+          <span class="ctrl-value" id="cv-frais">0,25 %</span>
+          <input class="ctrl-num" type="number" id="n-frais" min="0" max="1" step="0.05" value="0.25" inputmode="decimal" aria-label="Frais annuels en pourcentage">
         </div>
-        <input type="range" id="s-frais" min="0" max="1" step="0.05" value="0.25">
+        <input type="range" id="s-frais" min="0" max="1" step="0.05" value="0.25" aria-label="Frais annuels de l'ETF">
         <div class="ctrl-minmax"><span>0 %</span><span>1 %</span></div>
       </div>
 
       <div class="ctrl-card">
         <span class="ctrl-label">
-          Hausse versements / an
+          Hausse des versements par an
           <span class="tt-anchor">
             <button class="tt-btn" type="button" aria-label="Aide">?</button>
-            <div class="tt-box">Modélise une progression de carrière. Vos versements mensuels augmentent chaque année de ce pourcentage.</div>
+            <span class="tt-box">Modélise une progression de carrière : vos versements mensuels augmentent chaque année de ce pourcentage.</span>
           </span>
         </span>
         <div class="ctrl-value-row">
-          <span class="ctrl-value gold" id="cv-aug">0 %</span>
-          <input class="ctrl-num" type="number" id="n-aug" min="0" max="10" step="0.5" value="0">
+          <span class="ctrl-value" id="cv-aug">0 %</span>
+          <input class="ctrl-num" type="number" id="n-aug" min="0" max="10" step="0.5" value="0" inputmode="decimal" aria-label="Hausse annuelle des versements en pourcentage">
         </div>
-        <input type="range" id="s-aug" min="0" max="10" step="0.5" value="0">
+        <input type="range" id="s-aug" min="0" max="10" step="0.5" value="0" aria-label="Hausse des versements par an">
         <div class="ctrl-minmax"><span>0 %</span><span>10 %</span></div>
       </div>
 
     </div>
+  </div>
 
-    <div class="controls-footer">
-      <button class="btn-reset" id="btn-reset">
-        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
-          <path d="M8 3a5 5 0 1 0 4.546 2.914.5.5 0 0 1 .908-.417A6 6 0 1 1 8 2v1z"/>
-          <path d="M8 4.466V.534a.25.25 0 0 1 .41-.192l2.36 1.966c.12.1.12.284 0 .384L8.41 4.658A.25.25 0 0 1 8 4.466z"/>
-        </svg>
-        Réinitialiser
-      </button>
+  <!-- ── Résultats ───────────────────────────────────── -->
+  <h2 class="section">Résultat de la projection <span class="hint">écarts par rapport au plan par défaut (200 €/mois · 7 % · 20 ans)</span></h2>
+
+  <!-- Huit tuiles : quatre par rangée sur grand écran, deux sur téléphone —
+       jamais de tuile orpheline. Dans chacune, l'écart avec le plan par
+       défaut vient SOUS le chiffre : qu'il s'affiche ou non, les chiffres
+       restent alignés d'une tuile à l'autre. -->
+  <div class="kpi-grid resultats">
+    <div class="kpi s1">
+      <div class="kpi-label">Capital final PEA</div>
+      <div class="kpi-value" id="kpi-final">—</div>
+      <span class="kpi-delta" id="delta-final"></span>
+      <div class="kpi-sub" id="kpi-final-sub">—</div>
+    </div>
+    <div class="kpi s2">
+      <div class="kpi-label">Valeur réelle</div>
+      <div class="kpi-value" id="kpi-reel">—</div>
+      <span class="kpi-delta" id="delta-reel"></span>
+      <div class="kpi-sub" id="kpi-reel-sub">en euros d'aujourd'hui</div>
+    </div>
+    <div class="kpi ref">
+      <div class="kpi-label">Total versé (PEA)</div>
+      <div class="kpi-value" id="kpi-verse">—</div>
+      <span class="kpi-delta" id="delta-verse"></span>
+      <div class="kpi-sub" id="kpi-verse-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Multiplicateur</div>
+      <div class="kpi-value" id="kpi-mult">—</div>
+      <span class="kpi-delta" id="delta-mult"></span>
+      <div class="kpi-sub">capital final ÷ total versé</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Plus-value brute</div>
+      <div class="kpi-value" id="kpi-brut">—</div>
+      <span class="kpi-delta" id="delta-brut"></span>
+      <div class="kpi-sub" id="kpi-brut-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Plus-value nette</div>
+      <div class="kpi-value" id="kpi-net">—</div>
+      <span class="kpi-delta" id="delta-net"></span>
+      <div class="kpi-sub" id="kpi-net-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Frais ETF cumulés</div>
+      <div class="kpi-value" id="kpi-frais">—</div>
+      <span class="kpi-delta" id="delta-frais"></span>
+      <div class="kpi-sub" id="kpi-frais-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Économie face au CTO</div>
+      <div class="kpi-value" id="kpi-economie">—</div>
+      <div class="kpi-sub" id="kpi-economie-sub">—</div>
     </div>
   </div>
 
-  <!-- Versements ponctuels (dépliable) -->
-  <div class="coll-card" id="coll-vp">
-    <button class="coll-trigger" onclick="toggleColl('coll-vp')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
-        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
-      </svg>
-      Versements ponctuels
-      <span class="coll-badge" id="vp-count"></span>
-      <span class="coll-arrow">›</span>
-    </button>
-    <div class="coll-body">
-      <div id="vp-list"></div>
-      <button class="btn-vp-add" id="btn-vp-add">+ Ajouter un versement (prime, bonus, héritage…)</button>
+  <!-- Avec des phases de vie ou des réglages année/mois : ce qu'ils changent -->
+  <div class="kpi-grid" id="kpi-phases" hidden>
+    <div class="kpi">
+      <div class="kpi-label" id="kpi-nb-phases-lbl">Phases de vie</div>
+      <div class="kpi-value" id="kpi-nb-phases">—</div>
+      <div class="kpi-sub" id="kpi-nb-phases-sub">—</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Versement moyen</div>
+      <div class="kpi-value" id="kpi-mens-moy">—</div>
+      <div class="kpi-sub">par mois, sur toute la durée</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Rendement moyen</div>
+      <div class="kpi-value" id="kpi-taux-moy">—</div>
+      <div class="kpi-sub">par an, sur toute la durée</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Effet de la personnalisation</div>
+      <div class="kpi-value" id="kpi-ecart-phases">—</div>
+      <div class="kpi-sub" id="kpi-ecart-phases-sub">—</div>
     </div>
   </div>
 
-  <!-- Fiscalité (dépliable) -->
-  <div class="coll-card" id="coll-fisc">
-    <button class="coll-trigger" onclick="toggleColl('coll-fisc')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
-        <path d="M1 4.5A1.5 1.5 0 0 1 2.5 3h11A1.5 1.5 0 0 1 15 4.5v.793l-6.674 3.222a2.25 2.25 0 0 1-1.652 0L1 5.293V4.5zm0 2.3v4.7A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5V6.8l-6.022 2.908a3.25 3.25 0 0 1-2.956 0L1 6.8z"/>
-      </svg>
-      Fiscalité
-      <span class="coll-badge" id="fisc-badge" style="background:rgba(163,113,247,.14);color:var(--purple)"></span>
-      <span class="coll-arrow">›</span>
-    </button>
-    <div class="coll-body">
-      <div class="fisc-cb-row">
-        <input class="cb-custom" type="checkbox" id="cb-fisc">
-        <label for="cb-fisc">Appliquer la fiscalité PEA — sortie après 5 ans · prélèvements sociaux 17.2 % sur la plus-value uniquement</label>
-      </div>
-      <div id="fisc-details"></div>
+  <!-- Courbe de croissance, et ce dont le capital final est fait -->
+  <div class="card" id="carte-croissance">
+    <div class="card-title">Évolution du capital</div>
+    <div class="chart-wrap" data-hauteur="340" style="height:340px">
+      <canvas id="chartGrowth" role="img" aria-label="Évolution du capital du PEA année par année"></canvas>
     </div>
+    <div class="composition" id="composition"></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  PLAFOND PEA — widget toujours visible                 -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ── Plafond PEA ─────────────────────────────────── -->
   <div class="plafond-widget" id="plafond-widget">
     <div class="plafond-header">
       <div class="plafond-header-left">
-        <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+        <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.6;flex-shrink:0" aria-hidden="true">
           <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2zm3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2z"/>
         </svg>
         <span class="plafond-title-text">Plafond PEA</span>
@@ -275,7 +339,11 @@
         En couple — 2 PEA · plafond 300 000 €
       </label>
     </div>
-    <div class="plafond-track">
+    <!-- La jauge dit tout du plafond : versé, part utilisée, année d'atteinte,
+         capacité restante. (L'ancienne rangée de tuiles répétait ces
+         chiffres, avec une seconde jauge d'une autre couleur.) -->
+    <div class="plafond-track" role="progressbar" aria-label="Part du plafond utilisée"
+         aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
       <div class="plafond-fill" id="plafond-fill"></div>
     </div>
     <div class="plafond-meta">
@@ -286,114 +354,143 @@
     <div class="plafond-info" id="plafond-info"></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  AU-DELÀ DU PLAFOND (dépliable)                       -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- ── Aller plus loin ─────────────────────────────── -->
+  <h2 class="section">Aller plus loin <span class="hint">versements exceptionnels, fiscalité, phases de vie, rente, aléas de marché</span></h2>
+
+  <!-- Versements ponctuels -->
+  <div class="coll-card" id="coll-vp">
+    <button class="coll-trigger" type="button" data-coll="coll-vp" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z"/>
+      </svg>
+      Versements ponctuels
+      <span class="coll-badge" id="vp-count"></span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
+    </button>
+    <div class="coll-body"><div class="coll-inner">
+      <div id="vp-list"></div>
+      <button class="btn-vp-add" id="btn-vp-add">+ Ajouter un versement (prime, bonus, héritage…)</button>
+    </div></div>
+  </div>
+
+  <!-- Fiscalité -->
+  <div class="coll-card" id="coll-fisc">
+    <button class="coll-trigger" type="button" data-coll="coll-fisc" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+        <path d="M1 4.5A1.5 1.5 0 0 1 2.5 3h11A1.5 1.5 0 0 1 15 4.5v.793l-6.674 3.222a2.25 2.25 0 0 1-1.652 0L1 5.293V4.5zm0 2.3v4.7A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5V6.8l-6.022 2.908a3.25 3.25 0 0 1-2.956 0L1 6.8z"/>
+      </svg>
+      Fiscalité
+      <span class="coll-badge" id="fisc-badge"></span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
+    </button>
+    <div class="coll-body"><div class="coll-inner">
+      <div class="fisc-cb-row">
+        <input class="cb-custom" type="checkbox" id="cb-fisc">
+        <label for="cb-fisc">Appliquer la fiscalité du PEA — sortie après 5 ans : prélèvements sociaux de 18,6 % sur la plus-value uniquement</label>
+      </div>
+      <div id="fisc-details"></div>
+    </div></div>
+  </div>
+
+  <!-- Au-delà du plafond -->
   <div class="coll-card" id="coll-aude">
-    <button class="coll-trigger" onclick="toggleColl('coll-aude')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+    <button class="coll-trigger" type="button" data-coll="coll-aude" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M1 11.5a.5.5 0 0 0 .5.5h11.793l-3.147 3.146a.5.5 0 0 0 .708.708l4-4a.5.5 0 0 0 0-.708l-4-4a.5.5 0 0 0-.708.708L13.293 11H1.5a.5.5 0 0 0-.5.5zm14-7a.5.5 0 0 1-.5.5H2.707l3.147 3.146a.5.5 0 1 1-.708.708l-4-4a.5.5 0 0 1 0-.708l4-4a.5.5 0 1 1 .708.708L2.707 4H14.5a.5.5 0 0 1 .5.5z"/>
       </svg>
       Au-delà du plafond
-      <span class="coll-badge" id="aude-badge" style="background:rgba(210,153,34,.14);color:var(--gold)"></span>
-      <span class="coll-arrow">›</span>
+      <span class="coll-badge" id="aude-badge"></span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
     </button>
-    <div class="coll-body">
+    <div class="coll-body"><div class="coll-inner">
       <div class="fisc-cb-row">
         <input class="cb-custom" type="checkbox" id="cb-aude">
-        <label for="cb-aude">Continuer à épargner au-delà du plafond PEA dans une enveloppe complémentaire</label>
+        <label for="cb-aude">Continuer à épargner au-delà du plafond du PEA dans une enveloppe complémentaire</label>
       </div>
       <div id="aude-params" class="aude-params-hidden">
         <div class="aude-grid">
           <div class="aude-field aude-field-wide">
-            <label class="aude-lbl">Enveloppe complémentaire</label>
+            <label class="aude-lbl" for="aude-enveloppe">Enveloppe complémentaire</label>
             <select class="aude-select" id="aude-enveloppe">
-              <option value="cto">CTO — Compte-Titres Ordinaire (flat tax 30 %)</option>
-              <option value="av">Assurance-vie &gt;8 ans (abattement 4 600 € + taux 24.7 %)</option>
-              <option value="peapme">PEA-PME — jusqu'à 225 000 € cumulés (PS 17.2 %)</option>
+              <option value="cto">Compte-titres ordinaire — flat tax de 31,4 %</option>
+              <option value="av">Assurance-vie de plus de 8 ans — 17,2 % + impôt après abattement</option>
+              <option value="peapme">PEA-PME — 18,6 %, mais 75 000 € de versements au plus</option>
             </select>
           </div>
           <div class="aude-field">
-            <label class="aude-lbl">Rendement attendu (%)</label>
-            <input class="vp-input" type="number" id="n-taux-aude" min="0" max="15" step="0.5" value="7">
+            <label class="aude-lbl" for="n-taux-aude">Rendement attendu (%)</label>
+            <input class="vp-input" type="number" id="n-taux-aude" min="0" max="15" step="0.5" value="7" inputmode="decimal">
           </div>
           <div class="aude-field">
-            <label class="aude-lbl">Frais annuels (%)</label>
-            <input class="vp-input" type="number" id="n-frais-aude" min="0" max="2" step="0.05" value="0.25">
+            <label class="aude-lbl" for="n-frais-aude">Frais annuels (%)</label>
+            <input class="vp-input" type="number" id="n-frais-aude" min="0" max="2" step="0.05" value="0.25" inputmode="decimal">
           </div>
         </div>
         <div id="aude-fiscal"></div>
       </div>
-    </div>
+    </div></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  MES SCÉNARIOS (dépliable)                             -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- Mes scénarios -->
   <div class="coll-card open" id="coll-scenarios">
-    <button class="coll-trigger" onclick="toggleColl('coll-scenarios')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+    <button class="coll-trigger" type="button" data-coll="coll-scenarios" aria-expanded="true">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M2 1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H9.5a1 1 0 0 0-1 1v4.5h3a.5.5 0 0 1 .354.854l-3.5 3.5a.5.5 0 0 1-.708 0l-3.5-3.5A.5.5 0 0 1 4.5 6.5h3V2A2 2 0 0 1 9.5 0H14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2h2.5a.5.5 0 0 1 0 1H2z"/>
       </svg>
       Mes scénarios
       <span class="coll-badge" id="scenarios-badge"></span>
-      <span class="coll-arrow">›</span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
     </button>
-    <div class="coll-body">
+    <div class="coll-body"><div class="coll-inner">
       <div class="scenarios-toolbar">
         <button class="btn-scenario-save" id="btn-save-scenario">💾 Sauvegarder ce scénario</button>
         <span class="scenarios-limit-hint" id="scenarios-limit-hint"></span>
       </div>
       <div id="scenarios-list"></div>
-    </div>
+    </div></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  PHASES DE VIE (dépliable)                            -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- Phases de vie -->
   <div class="coll-card" id="coll-phases">
-    <button class="coll-trigger" onclick="toggleColl('coll-phases')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+    <button class="coll-trigger" type="button" data-coll="coll-phases" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"/>
       </svg>
-      <span class="coll-label-full">Personnalisation avancée — Phases de vie</span><span class="coll-label-short">Phases de vie</span>
+      <span class="coll-label-full">Personnalisation avancée — phases de vie</span><span class="coll-label-short">Phases de vie</span>
       <span class="coll-badge" id="phases-badge"></span>
-      <span class="coll-arrow">›</span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
     </button>
-    <div class="coll-body">
+    <div class="coll-body"><div class="coll-inner">
 
-      <!-- Explication scénario appliqué -->
+      <!-- Explication du scénario appliqué -->
       <div id="scenario-explain" class="scenario-explain" style="display:none"></div>
 
-      <!-- Liste des cartes de phases -->
+      <!-- Cartes de phases -->
       <div id="phases-list"></div>
 
       <!-- Validation (chevauchements, avertissements) -->
       <div id="phases-validation"></div>
 
-      <!-- Bouton ajouter phase -->
       <button class="btn-vp-add" id="btn-phase-add">+ Ajouter une phase de vie</button>
 
       <!-- Bascule vue tableau année par année -->
       <button class="btn-year-view" id="btn-year-view">Vue tableau — paramètres par année</button>
       <div id="phases-year-table" style="display:none"></div>
 
-    </div>
+    </div></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  RÉGLAGES ANNÉE PAR ANNÉE & MOIS PAR MOIS (dépliable)  -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- Réglages année par année & mois par mois -->
   <div class="coll-card" id="coll-annees">
-    <button class="coll-trigger" onclick="toggleColl('coll-annees')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+    <button class="coll-trigger" type="button" data-coll="coll-annees" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M3.5 0a.5.5 0 0 1 .5.5V1h8V.5a.5.5 0 0 1 1 0V1h1a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h1V.5a.5.5 0 0 1 .5-.5zM1 4v10a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4H1z"/>
       </svg>
       <span class="coll-label-full">Réglages fins — année par année &amp; mois par mois</span><span class="coll-label-short">Année / mois</span>
-      <span class="coll-badge" id="annees-badge" style="background:rgba(46,168,196,.14);color:var(--teal)"></span>
-      <span class="coll-arrow">›</span>
+      <span class="coll-badge" id="annees-badge"></span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
     </button>
-    <div class="coll-body">
+    <div class="coll-body"><div class="coll-inner">
       <p class="annees-hint">
         Ajustez le versement et le rendement de <strong>chaque année</strong>, ou dépliez une année
         pour régler <strong>chaque mois</strong> individuellement.
@@ -401,41 +498,39 @@
       </p>
       <div id="annees-table"></div>
       <button class="btn-vp-add" id="btn-annees-reset" style="display:none">↺ Réinitialiser toutes les personnalisations année/mois</button>
-    </div>
+    </div></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  PHASE DE RENTE — vivre de son PEA (dépliable)         -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- Phase de rente -->
   <div class="coll-card" id="coll-rente">
-    <button class="coll-trigger" onclick="toggleColl('coll-rente')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+    <button class="coll-trigger" type="button" data-coll="coll-rente" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
         <path d="M8 4.5a.5.5 0 0 1 .5.5v3.5H11a.5.5 0 0 1 0 1H8a.5.5 0 0 1-.5-.5V5a.5.5 0 0 1 .5-.5z"/>
       </svg>
       <span class="coll-label-full">Phase de rente — vivre de son PEA</span><span class="coll-label-short">Rente</span>
-      <span class="coll-badge" id="rente-badge" style="background:rgba(63,185,80,.14);color:var(--green)"></span>
-      <span class="coll-arrow">›</span>
+      <span class="coll-badge" id="rente-badge"></span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
     </button>
-    <div class="coll-body">
+    <div class="coll-body"><div class="coll-inner">
       <div class="fisc-cb-row">
         <input class="cb-custom" type="checkbox" id="cb-rente">
-        <label for="cb-rente">À la fin de la période d'épargne, retirer une rente mensuelle du capital PEA.
-          Retraits après 5 ans : prélèvements sociaux 17.2 % sur la part de plus-value de chaque retrait,
+        <label for="cb-rente">À la fin de la période d'épargne, retirer une rente mensuelle du capital du PEA.
+          Retraits après 5 ans : prélèvements sociaux de 18,6 % sur la part de plus-value de chaque retrait ;
           le reste du capital continue de fructifier.</label>
       </div>
       <div id="rente-params" class="aude-params-hidden">
         <div class="aude-grid">
           <div class="aude-field">
-            <label class="aude-lbl">Rente nette souhaitée (€ / mois)</label>
-            <input class="vp-input" type="number" id="n-rente" min="0" step="50" value="1000">
+            <label class="aude-lbl" for="n-rente">Rente nette souhaitée (€ / mois)</label>
+            <input class="vp-input" type="number" id="n-rente" min="0" step="50" value="1000" inputmode="numeric">
           </div>
           <div class="aude-field">
-            <label class="aude-lbl">Rendement pendant la rente (%)</label>
-            <input class="vp-input" type="number" id="n-taux-rente" min="0" max="15" step="0.5" value="4">
+            <label class="aude-lbl" for="n-taux-rente">Rendement pendant la rente (%)</label>
+            <input class="vp-input" type="number" id="n-taux-rente" min="0" max="15" step="0.5" value="4" inputmode="decimal">
           </div>
           <div class="aude-field">
-            <label class="aude-lbl">Indexation sur l'inflation</label>
+            <span class="aude-lbl">Indexation sur l'inflation</span>
             <div class="fisc-cb-row" style="margin:0">
               <input class="cb-custom" type="checkbox" id="cb-rente-index" checked>
               <label for="cb-rente-index">rente revalorisée chaque année</label>
@@ -443,46 +538,44 @@
           </div>
         </div>
         <div id="rente-results"></div>
-        <div class="chart-wrap" style="height:260px; margin-top:1.25rem;">
-          <canvas id="chartRente"></canvas>
+        <div class="chart-wrap" data-hauteur="270" style="height:270px; margin-top:1.25rem;">
+          <canvas id="chartRente" role="img" aria-label="Capital restant et retraits cumulés pendant la phase de rente"></canvas>
         </div>
         <p class="annees-hint" style="margin-top:.9rem">
           Le rendement en phase de rente est souvent plus prudent qu'en phase d'épargne
           (allocation moins risquée à l'approche des retraits). Horizon simulé : 50 ans.
         </p>
       </div>
-    </div>
+    </div></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  MONTE CARLO — incertitude des marchés (dépliable)     -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- Monte Carlo -->
   <div class="coll-card" id="coll-mc">
-    <button class="coll-trigger" onclick="toggleColl('coll-mc')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+    <button class="coll-trigger" type="button" data-coll="coll-mc" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M13 1a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2h10zM3 0a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V3a3 3 0 0 0-3-3H3z"/>
         <path d="M5.5 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm4 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0zm4 4a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0z"/>
       </svg>
       <span class="coll-label-full">Monte Carlo — incertitude des marchés</span><span class="coll-label-short">Monte Carlo</span>
-      <span class="coll-badge" id="mc-badge" style="background:rgba(88,166,255,.14);color:var(--accent)"></span>
-      <span class="coll-arrow">›</span>
+      <span class="coll-badge" id="mc-badge"></span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
     </button>
-    <div class="coll-body">
+    <div class="coll-body"><div class="coll-inner">
       <div class="fisc-cb-row">
         <input class="cb-custom" type="checkbox" id="cb-mc">
         <label for="cb-mc">Simuler des milliers de trajectoires de marché aléatoires au lieu d'un
           rendement fixe : le rendement moyen reste celui du plan, mais chaque année fluctue selon
-          la volatilité choisie. Résultat : la fourchette des futurs possibles (pessimiste 10 % /
-          médiane / optimiste 90 %).</label>
+          la volatilité choisie. Résultat : la fourchette des futurs possibles (pessimiste 10 %,
+          médiane, optimiste 90 %).</label>
       </div>
       <div id="mc-params" class="aude-params-hidden">
         <div class="aude-grid">
           <div class="aude-field">
-            <label class="aude-lbl">Volatilité annuelle (%)</label>
-            <input class="vp-input" type="number" id="n-vol-mc" min="1" max="40" step="1" value="15">
+            <label class="aude-lbl" for="n-vol-mc">Volatilité annuelle (%)</label>
+            <input class="vp-input" type="number" id="n-vol-mc" min="1" max="40" step="1" value="15" inputmode="numeric">
           </div>
           <div class="aude-field">
-            <label class="aude-lbl">Trajectoires simulées</label>
+            <label class="aude-lbl" for="n-runs-mc">Trajectoires simulées</label>
             <select class="aude-select" id="n-runs-mc">
               <option value="500">500 (rapide)</option>
               <option value="1000" selected>1 000</option>
@@ -490,51 +583,52 @@
             </select>
           </div>
           <div class="aude-field">
-            <label class="aude-lbl">Objectif de capital (€)</label>
-            <input class="vp-input" type="number" id="n-objectif-mc" min="0" step="10000" value="100000">
+            <label class="aude-lbl" for="n-objectif-mc">Objectif de capital (€)</label>
+            <input class="vp-input" type="number" id="n-objectif-mc" min="0" step="10000" value="100000" inputmode="numeric">
           </div>
         </div>
         <div id="mc-results"></div>
-        <div class="chart-wrap" style="height:280px; margin-top:1.25rem;">
-          <canvas id="chartMC"></canvas>
+        <div class="chart-wrap" data-hauteur="290" style="height:290px; margin-top:1.25rem;">
+          <canvas id="chartMC" role="img" aria-label="Éventail des trajectoires simulées : pessimiste, médiane, optimiste"></canvas>
         </div>
         <p class="annees-hint" style="margin-top:.9rem">
           Modèle log-normal mensuel calibré sur le rendement du plan (le MSCI World a une volatilité
-          historique d'environ 15 %/an). La médiane est plus basse que le scénario déterministe :
-          c'est le coût mathématique de la volatilité. Phases de vie, réglages année/mois et
-          versements ponctuels ne sont pas pris en compte ici.
+          historique d'environ 15 % par an). La médiane est plus basse que le scénario déterministe :
+          c'est le coût mathématique de la volatilité. La simulation porte sur le plan régulier du PEA
+          (apport et versements mensuels, arrêtés au plafond) : phases de vie, réglages année/mois,
+          versements ponctuels et enveloppe complémentaire n'y entrent pas. À paramètres identiques,
+          le tirage est toujours le même : seul un réglage modifié fait bouger les chiffres.
         </p>
       </div>
-    </div>
+    </div></div>
   </div>
 
-  <!-- ═══════════════════════════════════════════════════════ -->
-  <!--  BACKTEST — « et si j'avais commencé en… » (dépliable) -->
-  <!-- ═══════════════════════════════════════════════════════ -->
+  <!-- Backtest -->
   <div class="coll-card" id="coll-bt">
-    <button class="coll-trigger" onclick="toggleColl('coll-bt')">
-      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" style="opacity:.55;flex-shrink:0">
+    <button class="coll-trigger" type="button" data-coll="coll-bt" aria-expanded="false">
+      <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
         <path d="M8.515 1.019A7 7 0 0 0 8 1V0a8 8 0 0 1 .589.022l-.074.997zm2.004.45a7.003 7.003 0 0 0-.985-.299l.219-.976c.383.086.76.2 1.126.342l-.36.933zm1.37.71a7.01 7.01 0 0 0-.439-.27l.493-.87a8.025 8.025 0 0 1 .979.654l-.615.789a6.996 6.996 0 0 0-.418-.302zm1.834 1.79a6.99 6.99 0 0 0-.653-.796l.724-.69c.27.285.52.59.747.91l-.818.576zm.744 1.352a7.08 7.08 0 0 0-.214-.468l.893-.45a7.976 7.976 0 0 1 .45 1.088l-.95.313a7.023 7.023 0 0 0-.179-.483zm.53 2.507a6.991 6.991 0 0 0-.1-1.025l.985-.17c.067.386.106.778.116 1.17l-1 .025zm-.131 1.538c.033-.17.06-.339.081-.51l.993.123a7.957 7.957 0 0 1-.23 1.155l-.964-.267c.046-.165.086-.332.12-.501zm-.952 2.379c.184-.29.346-.594.486-.908l.914.405c-.16.36-.345.706-.555 1.038l-.845-.535zm-.964 1.205c.122-.122.239-.248.35-.378l.758.653a8.073 8.073 0 0 1-.401.432l-.707-.707z"/>
         <path d="M8 1a7 7 0 1 0 4.95 11.95l.707.707A8.001 8.001 0 1 1 8 0v1z"/>
         <path d="M7.5 3a.5.5 0 0 1 .5.5v5.21l3.248 1.856a.5.5 0 0 1-.496.868l-3.5-2A.5.5 0 0 1 7 9V3.5a.5.5 0 0 1 .5-.5z"/>
       </svg>
       <span class="coll-label-full">Backtest — « et si j'avais commencé en… »</span><span class="coll-label-short">Backtest</span>
-      <span class="coll-badge" id="bt-badge" style="background:rgba(227,115,43,.14);color:#e3732b"></span>
-      <span class="coll-arrow">›</span>
+      <span class="coll-badge" id="bt-badge"></span>
+      <span class="coll-arrow" aria-hidden="true">›</span>
     </button>
-    <div class="coll-body">
+    <div class="coll-body"><div class="coll-inner">
       <p class="annees-hint" style="margin-top:0">
-        Applique à ton plan actuel (apport, versement mensuel, frais) la séquence <strong>réelle</strong>
-        des rendements annuels du MSCI World depuis l'année choisie — pour voir ce qu'auraient donné
-        les grandes crises. Rendements approximatifs (USD, dividendes réinvestis), à titre pédagogique.
+        Applique à votre plan régulier (apport, versements mensuels jusqu'au plafond, frais) la séquence
+        <strong>réelle</strong> des rendements annuels du MSCI World depuis l'année choisie — pour voir ce
+        qu'auraient donné les grandes crises. Rendements approximatifs (en dollars, dividendes réinvestis),
+        à titre pédagogique.
       </p>
       <div class="aude-grid" style="margin-top:.9rem">
         <div class="aude-field">
-          <label class="aude-lbl">Année de départ</label>
+          <label class="aude-lbl" for="bt-annee">Année de départ</label>
           <select class="aude-select" id="bt-annee"></select>
         </div>
         <div class="aude-field aude-field-wide">
-          <label class="aude-lbl">Départs célèbres</label>
+          <span class="aude-lbl">Départs célèbres</span>
           <div style="display:flex; gap:.45rem; flex-wrap:wrap;">
             <button class="preset-btn bt-preset" data-annee="1973">1973 · choc pétrolier</button>
             <button class="preset-btn bt-preset" data-annee="1990">1990 · Japon &amp; Golfe</button>
@@ -544,125 +638,17 @@
         </div>
       </div>
       <div id="bt-results"></div>
-    </div>
+    </div></div>
   </div>
 
-  <!-- KPI grid : 7 existantes + 4 plafond -->
-  <div class="kpi-grid">
-    <div class="kpi green">
-      <span class="kpi-delta" id="delta-final"></span>
-      <div class="kpi-label">Capital final PEA</div>
-      <div class="kpi-value" id="kpi-final">—</div>
-      <div class="kpi-sub" id="kpi-final-sub">valeur nominale</div>
-    </div>
-    <div class="kpi teal">
-      <span class="kpi-delta" id="delta-reel"></span>
-      <div class="kpi-label">Valeur réelle</div>
-      <div class="kpi-value" id="kpi-reel">—</div>
-      <div class="kpi-sub" id="kpi-reel-sub">pouvoir d'achat actuel</div>
-    </div>
-    <div class="kpi blue">
-      <span class="kpi-delta" id="delta-verse"></span>
-      <div class="kpi-label">Total versé (PEA)</div>
-      <div class="kpi-value" id="kpi-verse">—</div>
-      <div class="kpi-sub" id="kpi-verse-sub">—</div>
-    </div>
-    <div class="kpi gold">
-      <span class="kpi-delta" id="delta-brut"></span>
-      <div class="kpi-label">Plus-value brute</div>
-      <div class="kpi-value" id="kpi-brut">—</div>
-      <div class="kpi-sub" id="kpi-brut-sub">—</div>
-    </div>
-    <div class="kpi purple">
-      <span class="kpi-delta" id="delta-net"></span>
-      <div class="kpi-label">Plus-value nette</div>
-      <div class="kpi-value" id="kpi-net">—</div>
-      <div class="kpi-sub" id="kpi-net-sub">—</div>
-    </div>
-    <div class="kpi red">
-      <span class="kpi-delta" id="delta-frais"></span>
-      <div class="kpi-label">Frais ETF cumulés</div>
-      <div class="kpi-value" id="kpi-frais">—</div>
-      <div class="kpi-sub" id="kpi-frais-sub">—</div>
-    </div>
-    <div class="kpi green">
-      <span class="kpi-delta" id="delta-mult"></span>
-      <div class="kpi-label">Multiplicateur</div>
-      <div class="kpi-value" id="kpi-mult">—</div>
-      <div class="kpi-sub">× votre mise totale</div>
-    </div>
-
-    <!-- Nouvelles KPI plafond & fiscalité comparative -->
-    <div class="kpi gold">
-      <div class="kpi-label">Versements PEA / Plafond</div>
-      <div class="kpi-value" id="kpi-verse-pea">—</div>
-      <div class="kpi-sub" id="kpi-verse-pea-sub">/ 150 000 €</div>
-      <div class="kpi-progress"><div class="kpi-progress-fill" id="kpi-progress-fill"></div></div>
-    </div>
-    <div class="kpi teal">
-      <div class="kpi-label">Plafond atteint</div>
-      <div class="kpi-value" id="kpi-plafond-an">—</div>
-      <div class="kpi-sub" id="kpi-plafond-an-sub">sur la durée simulée</div>
-    </div>
-    <div class="kpi green">
-      <span class="kpi-delta" id="delta-total-all"></span>
-      <div class="kpi-label">Capital total</div>
-      <div class="kpi-value" id="kpi-total-all">—</div>
-      <div class="kpi-sub" id="kpi-total-all-sub">PEA + complément</div>
-    </div>
-    <div class="kpi purple">
-      <div class="kpi-label">Économie vs CTO</div>
-      <div class="kpi-value" id="kpi-economie">—</div>
-      <div class="kpi-sub" id="kpi-economie-sub">avantage fiscal PEA</div>
-    </div>
-
-    <!-- KPI phases de vie -->
-    <div class="kpi blue">
-      <div class="kpi-label">Phases définies</div>
-      <div class="kpi-value" id="kpi-nb-phases">—</div>
-      <div class="kpi-sub" id="kpi-nb-phases-sub">scénario constant</div>
-    </div>
-    <div class="kpi gold">
-      <div class="kpi-label">Versement moyen</div>
-      <div class="kpi-value" id="kpi-mens-moy">—</div>
-      <div class="kpi-sub">€ / mois (pondéré)</div>
-    </div>
-    <div class="kpi teal">
-      <div class="kpi-label">Rendement moyen</div>
-      <div class="kpi-value" id="kpi-taux-moy">—</div>
-      <div class="kpi-sub">% / an (pondéré)</div>
-    </div>
-    <div class="kpi purple">
-      <div class="kpi-label">Écart vs constant</div>
-      <div class="kpi-value" id="kpi-ecart-phases">—</div>
-      <div class="kpi-sub" id="kpi-ecart-phases-sub">sans personnalisation</div>
-    </div>
-  </div>
-
-  <!-- Graphiques -->
-  <div class="charts-grid">
-    <div class="card">
-      <div class="card-title">Évolution du capital</div>
-      <div class="chart-wrap" style="height:300px">
-        <canvas id="chartGrowth"></canvas>
-      </div>
-    </div>
-    <div class="card">
-      <div class="card-title">Composition du capital PEA</div>
-      <div class="chart-wrap" style="height:300px">
-        <canvas id="chartDoughnut"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- Tableau -->
+  <!-- ── Tableau détaillé ────────────────────────────── -->
   <div class="card table-card">
     <div class="card-title">Détail année par année</div>
     <div class="table-filter-bar">
-      <input type="text" id="table-filter" class="table-filter-input" placeholder="Filtrer par année ou phase…">
+      <input type="search" id="table-filter" class="table-filter-input" placeholder="Filtrer par année ou par phase…" aria-label="Filtrer le tableau">
     </div>
     <div class="table-overflow-wrap">
-      <table>
+      <table id="table-annees">
         <thead>
           <tr>
             <th data-col="an">Année <span class="th-sort-icon"></span></th>
@@ -674,7 +660,7 @@
             <th data-col="frais">Frais cumulés <span class="th-sort-icon"></span></th>
             <th data-col="rend-an">Rend. année <span class="th-sort-icon"></span></th>
             <th data-col="phase">Phase <span class="th-sort-icon"></span></th>
-            <th data-col="cagr">CAGR <span class="th-sort-icon"></span></th>
+            <th data-col="tri" title="Rendement annualisé de vos versements depuis le départ, frais déduits (taux de rendement interne)">Rend. annualisé <span class="th-sort-icon"></span></th>
             <th id="th-aude" style="display:none">Capital complément</th>
           </tr>
         </thead>
@@ -684,25 +670,16 @@
     </div>
   </div>
 
-</div>
+</main>
 
-<footer>
-  Simulation indicative — Plafond PEA : 150 000 € de versements nets · Frais ETF déduits annuellement · Valeur réelle = capital / (1 + inflation)ⁿ<br>
-  PS PEA 17.2 % sur plus-value · AV : abattement 4 600 €/an (couple 9 200 €) puis 24.7 % · CTO : flat tax 30 % · Rendements passés ne préjugent pas du futur
+<footer class="pied">
+  Simulation indicative — plafond du PEA : 150 000 € de versements nets · frais de l'ETF déduits chaque année · valeur réelle = capital / (1 + inflation)ⁿ<br>
+  Fiscalité 2026 (LFSS 2026) — PEA et PEA-PME : prélèvements sociaux de 18,6 % sur la plus-value · compte-titres : flat tax de 31,4 % · assurance-vie de plus de 8 ans : prélèvements sociaux maintenus à 17,2 %, plus 7,5 % d'impôt sur les gains au-delà de 4 600 € par an (9 200 € pour un couple) · les rendements passés ne préjugent pas du futur
 </footer>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="simulation.js"></script>
 <script src="charts.js"></script>
 <script src="ui.js"></script>
-  <script>
-    /* PWA : installable sur l'iPhone via Tailscale, et consultable hors
-       connexion (la coquille est mise en cache par le service worker).
-       Nécessite une origine sécurisée : https (Tailscale) ou localhost. */
-    if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      window.addEventListener('load', () =>
-        navigator.serviceWorker.register('/sw.js').catch(() => {}));
-    }
-  </script>
 </body>
 </html>
